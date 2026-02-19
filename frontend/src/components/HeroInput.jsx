@@ -7,7 +7,7 @@ const stepIcons = ['📂', '🔍', '🧪', '🤖', '📤', '🔄'];
 export default function HeroInput() {
     const {
         repoUrl, teamName, leaderName, isRunning, currentStep, steps,
-        setField, startAgent, loadDemo, reset, result,
+        setField, startAgent, loadDemo, reset, result, error,
     } = useAgentStore();
 
     const canSubmit = repoUrl && teamName && leaderName && !isRunning;
@@ -84,7 +84,7 @@ export default function HeroInput() {
                             )}
                         </motion.button>
 
-                        {!isRunning && !result && (
+                        {!isRunning && !result && !error && (
                             <motion.button
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
@@ -97,7 +97,7 @@ export default function HeroInput() {
                             </motion.button>
                         )}
 
-                        {!isRunning && result && (
+                        {!isRunning && (result || error) && (
                             <motion.button
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}

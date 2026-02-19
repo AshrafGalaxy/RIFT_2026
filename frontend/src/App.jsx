@@ -12,7 +12,7 @@ import Footer from './components/Footer';
 
 function ErrorBanner() {
   const error = useAgentStore((s) => s.error);
-  const reset = useAgentStore((s) => s.reset);
+  const dismissError = useAgentStore((s) => s.dismissError);
 
   if (!error) return null;
 
@@ -29,13 +29,13 @@ function ErrorBanner() {
             <span className="text-xl">❌</span>
             <div>
               <p className="text-accent-red font-semibold text-sm">Pipeline Error</p>
-              <p className="text-text-secondary text-xs mt-0.5">{error}</p>
+              <p className="text-text-secondary text-xs mt-0.5 break-all">{error}</p>
             </div>
           </div>
           <button
-            onClick={reset}
+            onClick={dismissError}
             className="text-text-muted hover:text-text-primary text-xs px-3 py-1.5 rounded-lg
-                          border border-border hover:border-primary transition-all cursor-pointer"
+                          border border-border hover:border-primary transition-all cursor-pointer flex-shrink-0 ml-4"
           >
             Dismiss
           </button>
@@ -46,10 +46,8 @@ function ErrorBanner() {
 }
 
 export default function App() {
-  const fetchLatestResult = useAgentStore((s) => s.fetchLatestResult);
-
   useEffect(() => {
-    fetchLatestResult();
+    useAgentStore.getState().fetchLatestResult();
   }, []);
 
   return (
@@ -68,3 +66,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -13,7 +13,7 @@ export default function Footer() {
                 <div className="flex items-center gap-3">
                     {teamName && <span className="text-text-secondary">{teamName}</span>}
                     <a
-                        href="https://github.com"
+                        href="https://github.com/AshrafGalaxy/Rift"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-text-muted hover:text-primary transition-colors"

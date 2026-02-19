@@ -104,20 +104,34 @@ const useAgentStore = create((set, get) => ({
             ],
         })),
 
+    // Full reset — clears EVERYTHING including inputs for a clean new run
     reset: () =>
         set({
+            repoUrl: '',
+            teamName: '',
+            leaderName: '',
             isRunning: false,
             currentStep: 0,
             liveLog: [],
             result: null,
             error: null,
+            fixFilterType: 'ALL',
         }),
+
+    // Dismiss error banner only — don't wipe result or inputs
+    dismissError: () => set({ error: null }),
 
     startAgent: async () => {
         const { repoUrl, teamName, leaderName, addLog } = get();
-        if (!repoUrl || !teamName || !leaderName) return;
 
-        set({ isRunning: true, currentStep: 0, liveLog: [], result: null, error: null });
+        // Input validation
+        if (!repoUrl || !teamName || !leaderName) return;
+        if (!/^https?:\/\/.+/.test(repoUrl)) {
+            set({ error: 'Please enter a valid repository URL starting with https://' });
+            return;
+        }
+
+        set({ isRunning: true, currentStep: 0, liveLog: [], result: null, error: null, fixFilterType: 'ALL' });
 
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -158,7 +172,15 @@ const useAgentStore = create((set, get) => ({
             const transformed = transformBackendResult(data);
 
             set({ result: transformed, isRunning: false, currentStep: STEPS.length });
-            addLog('✅ Agent completed successfully!', 'success');
+
+            // Log correct status — don't say "success" if backend returned ERROR
+            if (transformed.final_status === 'ERROR') {
+                addLog(`⚠️ Agent completed with errors: ${transformed.error_message || 'Unknown error'}`, 'error');
+            } else if (transformed.final_status === 'PASSED') {
+                addLog('✅ Pipeline healed successfully!', 'success');
+            } else {
+                addLog(`⚠️ Agent finished — status: ${transformed.final_status}`, 'progress');
+            }
         } catch (err) {
             clearInterval(stepInterval);
             clearTimeout(timeoutWarning);
@@ -175,7 +197,13 @@ const useAgentStore = create((set, get) => ({
             if (!res.ok) return; // 404 means no previous run
             const data = await res.json();
             const transformed = transformBackendResult(data);
-            set({ result: transformed });
+            set({
+                result: transformed,
+                // Pre-fill inputs from last result so user sees context
+                repoUrl: data.repo_url || '',
+                teamName: data.team_name || '',
+                leaderName: data.leader_name || '',
+            });
         } catch {
             // Silently ignore — page just shows empty state
         }

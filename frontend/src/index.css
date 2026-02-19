@@ -207,4 +207,47 @@
   .pulse-dot {
     animation: pulse-green 2s ease-in-out infinite;
   }
+
+  .glow-yellow {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.3), 0 0 30px rgba(245, 158, 11, 0.1);
+  }
+}
+
+/* ─── Light Mode Overrides ─── */
+.light {
+  --color-surface: #F8F7FC;
+  --color-surface-card: rgba(255, 255, 255, 0.85);
+  --color-surface-elevated: rgba(240, 235, 255, 0.8);
+  --color-surface-input: rgba(245, 240, 255, 0.9);
+  --color-border: rgba(124, 58, 237, 0.15);
+  --color-border-light: rgba(124, 58, 237, 0.08);
+  --color-text-primary: #1A1028;
+  --color-text-secondary: #4A4560;
+  --color-text-muted: #8A85A0;
+}
+
+.light body {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.light body::before {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124, 58, 237, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(236, 72, 153, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 20% 80%, rgba(124, 58, 237, 0.03) 0%, transparent 50%);
+}
+
+.light ::-webkit-scrollbar-track {
+  background: rgba(245, 240, 255, 0.5);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.2);
+}
+
+.light .hero-gradient-bg {
+  background: linear-gradient(135deg, #f0e6ff 0%, #e6ecff 25%, #f0e0ff 50%, #e0ecf8 75%, #f0e6ff 100%);
+  background-size: 400% 400%;
+  animation: heroGradientShift 12s ease-in-out infinite;
 }

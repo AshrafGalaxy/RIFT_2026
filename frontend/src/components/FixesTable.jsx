@@ -20,7 +20,34 @@ export default function FixesTable() {
     const setFixFilter = useAgentStore((s) => s.setFixFilter);
 
     if (isRunning && !result?.fixes?.length) return <FixesSkeleton />;
-    if (!result?.fixes?.length) return null;
+    if (!result) return null;
+
+    // Show meaningful empty state when result exists but has no fixes
+    if (!result.fixes || result.fixes.length === 0) {
+        return (
+            <motion.section
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="max-w-5xl mx-auto px-4 sm:px-6 pb-8"
+            >
+                <div className="glass rounded-2xl p-6 sm:p-8">
+                    <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
+                        🔧 Fixes Applied
+                        <span className="bg-primary/20 text-primary-light text-xs px-2.5 py-0.5 rounded-full font-medium">0</span>
+                    </h3>
+                    <div className="text-center py-8">
+                        <p className="text-3xl mb-3">🛠️</p>
+                        <p className="text-text-secondary text-sm">
+                            {result.final_status === 'ERROR'
+                                ? 'No fixes were applied — the agent encountered an error during execution.'
+                                : 'No fixes were needed — all tests passed.'}
+                        </p>
+                    </div>
+                </div>
+            </motion.section>
+        );
+    }
 
     const filtered = fixFilterType === 'ALL'
         ? result.fixes
@@ -117,6 +144,7 @@ export default function FixesTable() {
 }
 
 function CommitMessage({ message }) {
+    if (!message) return <span className="text-text-muted italic">No message</span>;
     const prefix = '[AI-AGENT]';
     if (!message.startsWith(prefix)) return <span>{message}</span>;
 

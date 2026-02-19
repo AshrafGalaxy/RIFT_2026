@@ -13,6 +13,31 @@ export default function ScoreBreakdown() {
     const { base, speed_bonus, efficiency_penalty, total } = result.score;
     const isError = result.final_status === 'ERROR';
 
+    // If ERROR with 0 scores, show a descriptive empty state instead of confusing zero-ring
+    if (isError && total === 0) {
+        return (
+            <motion.section
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="max-w-5xl mx-auto px-4 sm:px-6 pb-8"
+            >
+                <div className="glass rounded-2xl p-6 sm:p-8">
+                    <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
+                        🏆 Score Breakdown
+                    </h3>
+                    <div className="text-center py-8">
+                        <p className="text-3xl mb-3">📊</p>
+                        <p className="text-text-secondary text-sm">
+                            No score available — the agent encountered an error before completing the pipeline.
+                        </p>
+                        <p className="text-text-muted text-xs mt-2">Score: 0 / 120</p>
+                    </div>
+                </div>
+            </motion.section>
+        );
+    }
+
     const chartData = [
         { name: 'Base Score', value: base, color: '#7C3AED' },
         { name: 'Speed Bonus', value: speed_bonus, color: '#10B981' },
