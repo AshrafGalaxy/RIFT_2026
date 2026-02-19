@@ -104,8 +104,21 @@ class TestOutput(BaseModel):
 
 class ErrorInfo(BaseModel):
     """A single parsed error from test output."""
-    file: str
-    line_number: int
-    bug_type: BugType
-    message: str
+    file: str = Field(default="unknown", description="File path of the error")
+    line_number: int = Field(default=0, description="Line number of the error")
+    bug_type: str = Field(default="SYNTAX", description="Error category")
+    message: str = Field(default="", description="Error message")
     code_snippet: str = ""
+
+    def model_post_init(self, __context) -> None:
+        """Sanitize fields after init — handle None from AI agents."""
+        if self.file is None:
+            object.__setattr__(self, 'file', 'unknown')
+        if self.line_number is None:
+            object.__setattr__(self, 'line_number', 0)
+        # Normalize bug_type to valid category
+        valid = {"LINTING", "SYNTAX", "LOGIC", "TYPE_ERROR", "IMPORT", "INDENTATION"}
+        bt = str(self.bug_type).upper().strip()
+        if bt not in valid:
+            bt = "SYNTAX"
+        object.__setattr__(self, 'bug_type', bt)

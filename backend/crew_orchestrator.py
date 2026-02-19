@@ -396,7 +396,7 @@ async def run_pipeline(request: RunRequest) -> RunResult:
             if not fixes_data and not new_commits:
                 # Fallback
                 from agents.heal_agent import heal_agent
-                error_objs = [ErrorInfo(**e) for e in errors_list]
+                error_objs = [ErrorInfo(**_sanitize_error(e)) for e in errors_list]
                 fix_objs, branch_name, new_commits = heal_agent.run(
                     repo_path, error_objs, request.team_name,
                     request.leader_name, i
@@ -498,6 +498,19 @@ async def run_pipeline(request: RunRequest) -> RunResult:
 
     results_service.save(result)
     return result
+
+
+def _sanitize_error(raw: dict) -> dict:
+    """Clean up an error dict from AI output before passing to ErrorInfo."""
+    if not isinstance(raw, dict):
+        return {"file": "unknown", "line_number": 0, "bug_type": "SYNTAX", "message": str(raw)}
+    return {
+        "file": raw.get("file") or "unknown",
+        "line_number": int(raw.get("line_number") or 0),
+        "bug_type": raw.get("bug_type") or "SYNTAX",
+        "message": raw.get("message") or "",
+        "code_snippet": raw.get("code_snippet") or "",
+    }
 
 
 def _parse_json_safe(text: str) -> dict | list:
