@@ -31,10 +31,10 @@ class CloneAgent:
         folder_name = team_name.strip().replace(" ", "_").upper()
         dest = CLONE_DIR / folder_name
 
-        # Clean up any previous clone
+        # Clean up any previous clone — robust for Windows file locks
         if dest.exists():
             logger.info(f"Removing previous clone at {dest}")
-            shutil.rmtree(dest, ignore_errors=True)
+            self._force_remove(dest)
 
         # Ensure parent directory exists (but NOT dest itself — git clone creates it)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -44,6 +44,45 @@ class CloneAgent:
 
         logger.info(f"Clone complete: {dest}")
         return str(dest)
+
+    @staticmethod
+    def _force_remove(path: Path) -> None:
+        """Remove a directory tree, handling Windows file locks."""
+        import time
+        import os
+        import stat
+
+        def _on_rm_error(func, fpath, exc_info):
+            """Handle permission errors on Windows by forcing writable."""
+            os.chmod(fpath, stat.S_IWRITE)
+            func(fpath)
+
+        # Attempt 1: standard rmtree with permission fix
+        try:
+            shutil.rmtree(path, onerror=_on_rm_error)
+            return
+        except Exception as e:
+            logger.warning(f"rmtree attempt 1 failed: {e}")
+
+        # Attempt 2: wait for file locks to release, then retry
+        time.sleep(1)
+        try:
+            shutil.rmtree(path, onerror=_on_rm_error)
+            return
+        except Exception as e:
+            logger.warning(f"rmtree attempt 2 failed: {e}")
+
+        # Attempt 3: fallback to OS-level force delete (Windows)
+        if os.name == 'nt':
+            os.system(f'rmdir /s /q "{path}"')
+        else:
+            os.system(f'rm -rf "{path}"')
+
+        if path.exists():
+            raise RuntimeError(
+                f"Cannot remove previous clone at '{path}'. "
+                f"Close any editors/terminals using this directory, then retry."
+            )
 
 
 # Singleton
