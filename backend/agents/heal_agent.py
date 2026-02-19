@@ -73,8 +73,11 @@ class HealAgent:
 
             # Commit
             try:
+                bug_type_str = str(error.bug_type)
+                if hasattr(error.bug_type, 'value'):
+                    bug_type_str = error.bug_type.value
                 commit_msg = format_commit_message(
-                    error.bug_type.value, error.file, error.line_number
+                    bug_type_str, error.file, error.line_number
                 )
                 fix.commit_message = commit_msg
                 git_service.commit_fix(repo, error.file, commit_msg)
@@ -120,15 +123,19 @@ class HealAgent:
         original_line = lines[error.line_number - 1]
 
         fix_generators = {
-            BugType.IMPORT: self._fix_import,
-            BugType.INDENTATION: self._fix_indentation,
-            BugType.SYNTAX: self._fix_syntax,
-            BugType.TYPE_ERROR: self._fix_type_error,
-            BugType.LINTING: self._fix_linting,
-            BugType.LOGIC: self._fix_logic,
+            "IMPORT": self._fix_import,
+            "INDENTATION": self._fix_indentation,
+            "SYNTAX": self._fix_syntax,
+            "TYPE_ERROR": self._fix_type_error,
+            "LINTING": self._fix_linting,
+            "LOGIC": self._fix_logic,
         }
 
-        generator = fix_generators.get(error.bug_type, self._fix_generic)
+        # bug_type may be a string or BugType enum — normalize to string
+        bt_key = str(error.bug_type).upper()
+        if hasattr(error.bug_type, 'value'):
+            bt_key = error.bug_type.value
+        generator = fix_generators.get(bt_key, self._fix_generic)
         fixed_line = generator(error, lines, error.line_number)
 
         if fixed_line is None:

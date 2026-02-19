@@ -277,15 +277,23 @@ async def run_pipeline(request: RunRequest) -> RunResult:
             passed=test_output.passed,
             failed=test_output.failed,
             total=test_output.total,
-            status=RunStatus.PASSED if test_output.failed == 0 else RunStatus.FAILED,
+            status=RunStatus.PASSED if (test_output.failed == 0 and test_output.total > 0) else RunStatus.FAILED,
             stdout=test_output.stdout[:2000],
             stderr=test_output.stderr[:2000],
             timestamp=now_iso(),
         )
         iterations.append(initial_iteration)
 
-        # Already passing?
-        if test_output.failed == 0 and test_output.exit_code == 0:
+        # Detect broken test environment (e.g., wrong Python, missing pytest)
+        stderr_lower = test_output.stderr.lower()
+        if 'no module named pytest' in stderr_lower or 'no module named' in stderr_lower:
+            logger.warning("Test environment is broken — module not found in stderr")
+            # Force failed status so healing loop runs
+            test_output.failed = max(test_output.failed, 1)
+            test_output.exit_code = 1
+
+        # Already passing? Only if we actually ran tests and they all passed.
+        if test_output.failed == 0 and test_output.exit_code == 0 and test_output.total > 0:
             logger.info("All tests PASS — no healing needed!")
             elapsed = time.time() - start_time
             result.status = RunStatus.PASSED
@@ -452,14 +460,14 @@ async def run_pipeline(request: RunRequest) -> RunResult:
                 total=current_total,
                 errors_found=len(errors_list),
                 fixes_applied=applied_count,
-                status=RunStatus.PASSED if current_failed == 0 else RunStatus.FAILED,
+                status=RunStatus.PASSED if (current_failed == 0 and current_total > 0) else RunStatus.FAILED,
                 stdout=current_stdout[:2000],
                 stderr=current_stderr[:2000],
                 timestamp=now_iso(),
             )
             iterations.append(iter_result)
 
-            if current_failed == 0 and current_exit_code == 0:
+            if current_failed == 0 and current_exit_code == 0 and current_total > 0:
                 logger.info(f"All tests PASSED on iteration {i}!")
                 for fix in all_fixes:
                     if fix.status == FixStatus.APPLIED:
@@ -472,7 +480,7 @@ async def run_pipeline(request: RunRequest) -> RunResult:
 
         # ========== FINALIZE ==========
         elapsed = time.time() - start_time
-        all_passed = current_failed == 0 and current_exit_code == 0
+        all_passed = current_failed == 0 and current_exit_code == 0 and current_total > 0
 
         result.fixes = all_fixes
         result.iterations = iterations

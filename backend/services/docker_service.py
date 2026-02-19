@@ -108,6 +108,7 @@ class DockerService:
     ) -> dict:
         """Fallback: run locally via subprocess."""
         import platform
+        import sys
 
         # Resolve to absolute path and validate
         resolved_path = str(Path(repo_path).resolve())
@@ -118,16 +119,27 @@ class DockerService:
                 "exit_code": -1,
             }
 
+        # Use the current Python interpreter to avoid PATH conflicts
+        # (e.g., MSYS2's python.exe intercepting the command on Windows)
+        python_exe = sys.executable
+        logger.info(f"Using Python executable: {python_exe}")
+
         all_stdout = []
         all_stderr = []
         last_exit_code = 0
 
         for cmd in commands:
+            # Replace generic 'python' with the actual interpreter path
+            if cmd.startswith("python -m ") or cmd.startswith("python "):
+                cmd = cmd.replace("python ", f'"{python_exe}" ', 1)
+            elif cmd.startswith("pip "):
+                # Use python -m pip to ensure correct pip
+                cmd = f'"{python_exe}" -m ' + cmd
+
             # Windows compatibility: convert bash-style redirects
             if platform.system() == "Windows":
                 cmd = cmd.replace("2>&1", "")  # Windows handles stderr separately
                 cmd = cmd.replace("2>/dev/null", "")
-                cmd = cmd.replace("'", '"')  # Windows uses double quotes
 
             try:
                 logger.info(f"Running: {cmd} (in {resolved_path})")
