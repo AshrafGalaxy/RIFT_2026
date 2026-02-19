@@ -1,4 +1,6 @@
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { FiChevronUp, FiChevronDown, FiChevronsUp } from 'react-icons/fi';
 import useAgentStore from '../store/useAgentStore';
 import { FixesSkeleton } from './Skeletons';
 
@@ -13,17 +15,58 @@ const BADGE_COLORS = {
     INDENTATION: 'bg-pink-500/15 text-pink-400 border-pink-500/30',
 };
 
+const COLUMNS = [
+    { key: 'file', label: 'File', align: 'text-left' },
+    { key: 'bug_type', label: 'Bug Type', align: 'text-left' },
+    { key: 'line_number', label: 'Line #', align: 'text-left' },
+    { key: 'commit_message', label: 'Commit Message', align: 'text-left' },
+    { key: 'status', label: 'Status', align: 'text-center' },
+];
+
+function SortArrow({ active, direction }) {
+    if (active) {
+        return direction === 'asc'
+            ? <FiChevronUp className="inline text-primary" size={14} />
+            : <FiChevronDown className="inline text-primary" size={14} />;
+    }
+    return <FiChevronsUp className="inline opacity-0 group-hover:opacity-40 transition-opacity" size={14} />;
+}
+
 export default function FixesTable() {
     const result = useAgentStore((s) => s.result);
     const isRunning = useAgentStore((s) => s.isRunning);
     const fixFilterType = useAgentStore((s) => s.fixFilterType);
     const setFixFilter = useAgentStore((s) => s.setFixFilter);
 
-    if (isRunning && !result?.fixes?.length) return <FixesSkeleton />;
+    const [sortKey, setSortKey] = useState(null);
+    const [sortDir, setSortDir] = useState('asc');
+
+    const fixes = result?.fixes || [];
+
+    const sorted = useMemo(() => {
+        const filtered = fixFilterType === 'ALL'
+            ? fixes
+            : fixes.filter((f) => f.bug_type === fixFilterType);
+        if (!sortKey) return filtered;
+        return [...filtered].sort((a, b) => {
+            let aVal = a[sortKey];
+            let bVal = b[sortKey];
+            if (sortKey === 'line_number') {
+                return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+            aVal = String(aVal).toLowerCase();
+            bVal = String(bVal).toLowerCase();
+            if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [fixes, fixFilterType, sortKey, sortDir]);
+
+    if (isRunning && !fixes.length) return <FixesSkeleton />;
     if (!result) return null;
 
-    // Show meaningful empty state when result exists but has no fixes
-    if (!result.fixes || result.fixes.length === 0) {
+    // Empty state when result exists but no fixes
+    if (!fixes.length) {
         return (
             <motion.section
                 initial={{ opacity: 0, y: 30 }}
@@ -49,9 +92,14 @@ export default function FixesTable() {
         );
     }
 
-    const filtered = fixFilterType === 'ALL'
-        ? result.fixes
-        : result.fixes.filter((f) => f.bug_type === fixFilterType);
+    const handleSort = (key) => {
+        if (sortKey === key) {
+            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortKey(key);
+            setSortDir('asc');
+        }
+    };
 
     return (
         <motion.section
@@ -89,19 +137,27 @@ export default function FixesTable() {
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto rounded-xl border border-border-light">
-                    <table className="w-full text-sm">
+                <div className="overflow-x-auto rounded-xl border border-border-light -mx-2 sm:mx-0">
+                    <table className="w-full text-sm min-w-[640px]">
                         <thead>
                             <tr className="bg-surface-input/60">
-                                <th className="text-left py-3 px-4 text-text-muted font-medium uppercase text-xs tracking-wider">File</th>
-                                <th className="text-left py-3 px-4 text-text-muted font-medium uppercase text-xs tracking-wider">Bug Type</th>
-                                <th className="text-left py-3 px-4 text-text-muted font-medium uppercase text-xs tracking-wider">Line #</th>
-                                <th className="text-left py-3 px-4 text-text-muted font-medium uppercase text-xs tracking-wider hidden md:table-cell">Commit Message</th>
-                                <th className="text-center py-3 px-4 text-text-muted font-medium uppercase text-xs tracking-wider">Status</th>
+                                {COLUMNS.map((col) => (
+                                    <th
+                                        key={col.key}
+                                        onClick={() => handleSort(col.key)}
+                                        className={`${col.align} py-3 px-4 text-text-muted font-medium uppercase text-xs tracking-wider
+                                            cursor-pointer select-none hover:text-primary transition-colors group`}
+                                    >
+                                        <span className="inline-flex items-center gap-1">
+                                            {col.label}
+                                            <SortArrow active={sortKey === col.key} direction={sortKey === col.key ? sortDir : null} />
+                                        </span>
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((fix, i) => (
+                            {sorted.map((fix, i) => (
                                 <motion.tr
                                     key={i}
                                     initial={{ opacity: 0 }}
@@ -117,7 +173,7 @@ export default function FixesTable() {
                                         </span>
                                     </td>
                                     <td className="py-3 px-4 font-mono text-xs text-text-secondary">{fix.line_number}</td>
-                                    <td className="py-3 px-4 text-xs text-text-secondary hidden md:table-cell max-w-xs truncate">
+                                    <td className="py-3 px-4 text-xs text-text-secondary max-w-xs truncate">
                                         <CommitMessage message={fix.commit_message} />
                                     </td>
                                     <td className="py-3 px-4 text-center">
@@ -133,7 +189,7 @@ export default function FixesTable() {
                     </table>
                 </div>
 
-                {filtered.length === 0 && (
+                {sorted.length === 0 && (
                     <div className="text-center py-8 text-text-muted text-sm">
                         No fixes found for filter "{fixFilterType}"
                     </div>

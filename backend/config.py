@@ -11,7 +11,7 @@ CLONE_DIR = BACKEND_DIR / "cloned_repos"
 RESULTS_PATH = PROJECT_ROOT / "results.json"
 
 # --- Healing Pipeline ---
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = 5          # default: 5 as per hackathon spec
 
 # --- Scoring ---
 BASE_SCORE = 100

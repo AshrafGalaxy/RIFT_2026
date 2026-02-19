@@ -2,12 +2,28 @@ import { motion } from 'framer-motion';
 import { FiGitBranch, FiCopy, FiExternalLink } from 'react-icons/fi';
 import useAgentStore from '../store/useAgentStore';
 import { SummarySkeleton } from './Skeletons';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
+
+function fireConfetti() {
+    const colors = ['#7C3AED', '#A78BFA', '#EC4899', '#10B981', '#F59E0B'];
+    confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 }, colors });
+    setTimeout(() => confetti({ particleCount: 50, angle: 60, spread: 60, origin: { x: 0, y: 0.65 }, colors }), 200);
+    setTimeout(() => confetti({ particleCount: 50, angle: 120, spread: 60, origin: { x: 1, y: 0.65 }, colors }), 400);
+}
 
 export default function RunSummary() {
     const result = useAgentStore((s) => s.result);
     const isRunning = useAgentStore((s) => s.isRunning);
     const [copied, setCopied] = useState(false);
+    const hasFiredConfetti = useRef(false);
+
+    useEffect(() => {
+        if (result?.final_status === 'PASSED' && !hasFiredConfetti.current) {
+            hasFiredConfetti.current = true;
+            fireConfetti();
+        }
+    }, [result]);
 
     if (isRunning && !result) return <SummarySkeleton />;
     if (!result) return null;

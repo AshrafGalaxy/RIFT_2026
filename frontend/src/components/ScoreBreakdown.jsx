@@ -12,9 +12,10 @@ export default function ScoreBreakdown() {
 
     const { base, speed_bonus, efficiency_penalty, total } = result.score;
     const isError = result.final_status === 'ERROR';
+    const isFailed = result.final_status === 'FAILED';
 
-    // If ERROR with 0 scores, show a descriptive empty state instead of confusing zero-ring
-    if (isError && total === 0) {
+    // If ERROR/FAILED with 0 scores, show a descriptive empty state instead of confusing zero-ring
+    if ((isError || isFailed) && total === 0) {
         return (
             <motion.section
                 initial={{ opacity: 0, y: 30 }}
@@ -29,7 +30,9 @@ export default function ScoreBreakdown() {
                     <div className="text-center py-8">
                         <p className="text-3xl mb-3">📊</p>
                         <p className="text-text-secondary text-sm">
-                            No score available — the agent encountered an error before completing the pipeline.
+                            {isError
+                                ? 'No score available — the agent encountered an error before completing the pipeline.'
+                                : 'No score available — the pipeline completed but could not fix the failures.'}
                         </p>
                         <p className="text-text-muted text-xs mt-2">Score: 0 / 120</p>
                     </div>
@@ -89,31 +92,57 @@ export default function ScoreBreakdown() {
                 </div>
 
                 {/* Bar Chart */}
-                <div className="mt-8 h-56 sm:h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} barSize={40} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(124,58,237,0.1)" />
-                            <XAxis dataKey="name" tick={{ fill: '#A0A0B8', fontSize: 12 }} axisLine={{ stroke: 'rgba(124,58,237,0.2)' }} />
-                            <YAxis tick={{ fill: '#A0A0B8', fontSize: 12 }} axisLine={{ stroke: 'rgba(124,58,237,0.2)' }} />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: 'rgba(15,11,26,0.95)',
-                                    border: '1px solid rgba(124,58,237,0.3)',
-                                    borderRadius: '12px',
-                                    color: '#F3F0FF',
-                                    fontSize: '13px',
-                                }}
-                            />
-                            <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                                {chartData.map((entry, i) => (
-                                    <Cell key={i} fill={entry.color} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
+                <ChartSection chartData={chartData} />
             </div>
         </motion.section>
+    );
+}
+
+function ChartSection({ chartData }) {
+    const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+    useEffect(() => {
+        const observer = new MutationObserver(() => {
+            setIsDark(document.documentElement.classList.contains('dark'));
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
+
+    const tickFill = isDark ? '#A0A0B8' : '#4A4560';
+    const axisStroke = isDark ? 'rgba(124,58,237,0.2)' : 'rgba(124,58,237,0.25)';
+    const gridStroke = isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.12)';
+    const tooltipBg = isDark ? 'rgba(15,11,26,0.95)' : 'rgba(255,255,255,0.95)';
+    const tooltipBorder = isDark ? 'rgba(124,58,237,0.3)' : 'rgba(124,58,237,0.2)';
+    const tooltipColor = isDark ? '#F3F0FF' : '#1E1033';
+
+    return (
+        <div className="mt-8 h-56 sm:h-64 min-h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} barSize={40} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="name" tick={{ fill: tickFill, fontSize: 12 }} axisLine={{ stroke: axisStroke }} />
+                    <YAxis tick={{ fill: tickFill, fontSize: 12 }} axisLine={{ stroke: axisStroke }} />
+                    <Tooltip
+                        contentStyle={{
+                            backgroundColor: tooltipBg,
+                            border: `1px solid ${tooltipBorder}`,
+                            borderRadius: '12px',
+                            color: tooltipColor,
+                            fontSize: '13px',
+                            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)',
+                        }}
+                        labelStyle={{ color: tooltipColor, fontWeight: 600 }}
+                        itemStyle={{ color: tooltipColor }}
+                    />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                        {chartData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                        ))}
+                    </Bar>
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
     );
 }
 

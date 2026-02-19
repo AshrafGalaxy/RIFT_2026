@@ -48,7 +48,7 @@ function transformBackendResult(data) {
             line_number: f.line_number,
             commit_message: f.commit_message,
             status: f.status === 'VERIFIED' ? 'Fixed' : f.status === 'APPLIED' ? 'Applied' : 'Failed',
-            dashboard_output: `${f.bug_type} error in ${f.file} line ${f.line_number}`,
+            dashboard_output: `${f.bug_type} error in ${f.file} line ${f.line_number} → Fix: ${f.commit_message ? f.commit_message.replace('[AI-AGENT] ', '') : 'applied'}`,
             original_code: f.original_code || '',
             fixed_code: f.fixed_code || '',
         })),
