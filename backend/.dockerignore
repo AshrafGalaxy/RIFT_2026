@@ -1,0 +1,21 @@
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# Cloned repos (runtime data, can be huge)
+cloned_repos/
+
+# Environment (secrets — injected via docker-compose)
+.env
+
+# Test scripts
+test_*.py
+
+# IDE
+.vscode/
+.idea/

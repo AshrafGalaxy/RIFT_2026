@@ -1,0 +1,13 @@
+# Dependencies (reinstalled in container)
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
