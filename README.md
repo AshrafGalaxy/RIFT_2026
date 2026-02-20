@@ -14,41 +14,49 @@
 
 ```mermaid
 graph TD
-    %% Styles
-    classDef user fill:#f9f,stroke:#333,stroke-width:2px,color:black,font-weight:bold
-    classDef frontend fill:#d4f1f9,stroke:#00bfff,stroke-width:2px,color:black,font-weight:bold
-    classDef backend fill:#e6fffa,stroke:#00fa9a,stroke-width:2px,color:black,font-weight:bold
-    classDef agent fill:#fff3e0,stroke:#ff8c00,stroke-width:2px,color:black
-    classDef loop fill:#fff0f5,stroke:#ff69b4,stroke-width:2px,color:black,stroke-dasharray: 5 5
-    classDef storage fill:#f3e5f5,stroke:#9370db,stroke-width:2px,color:black
+    %% Global Styles
+    classDef user fill:#FFB6C1,stroke:#333,stroke-width:2px,color:black,font-weight:bold
+    classDef frontend fill:#E0F7FA,stroke:#00ACC1,stroke-width:2px,color:black,font-weight:bold
+    classDef backend fill:#E8F5E9,stroke:#43A047,stroke-width:2px,color:black,font-weight:bold
+    classDef ai fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:black,font-weight:bold
+    classDef ext fill:#FFF3E0,stroke:#FB8C00,stroke-width:2px,color:black
+    classDef db fill:#ECEFF1,stroke:#546E7A,stroke-width:2px,color:black
 
-    User([👤 User]):::user -->|1. Submit Repo URL| Frontend[🖥️ React Frontend]:::frontend
-    Frontend -->|2. POST /api/run| Backend[⚙️ FastAPI Backend]:::backend
+    %% External Actors
+    User([👤 Developer]):::user
+    GitHub[🐱 GitHub Repository]:::ext
+    Gemini[🧠 Google Gemini AI]:::ai
 
-    subgraph Core_Logic [Backend Execution Environment]
+    %% System Boundary
+    subgraph System [Autonomous CI/CD Platform]
         direction TB
-        style Core_Logic fill:#f9f9f9,stroke:#666,stroke-width:1px,color:black
+        style System fill:#FAFAFA,stroke:#9E9E9E,stroke-width:1px,color:black
+
+        Frontend[🖥️ React Dashboard]:::frontend
+        Backend[⚙️ FastAPI Backend]:::backend
         
-        Backend --> Orchestrator[🎼 CrewAI Orchestrator]:::backend
-        
-        subgraph Agents [🤖 Autonomous Agents]
+        subgraph Engine [Execution Engine]
             direction TB
-            style Agents fill:#fff,stroke:#333,stroke-width:1px,color:black
+            style Engine fill:#FFFFFF,stroke:#333,stroke-width:1px
             
-            Orchestrator --> Clone[⬇️ Clone Agent]:::agent
-            Clone --> Discover[🔍 Discover Agent]:::agent
-            Discover --> HealLoop{🔄 Healing Loop}:::loop
-            
-            HealLoop -->|Analyze| Analyze[🧠 Analyze Agent]:::agent
-            Analyze -->|Fix| Heal[❤️‍🩹 Heal Agent]:::agent
-            Heal -->|Verify| Verify[✅ Verify Agent]:::agent
-            Verify -->|Test Fail| HealLoop
+            Orchestrator[🎼 CrewAI Agents]:::backend
+            Sandbox[📦 Docker Sandbox]:::ext
         end
         
-        Verify -->|Test Pass| Results[(💾 Results JSON)]:::storage
+        Results[(📊 Results JSON)]:::db
     end
 
-    Results -->|3. GET /api/results| Frontend
+    %% Data Flow
+    User -->|1. Submit Repo URL| Frontend
+    Frontend -->|2. Trigger Run| Backend
+    Backend -->|3. Initialize| Orchestrator
+    
+    Orchestrator <-->|4. Clone & Push| GitHub
+    Orchestrator <-->|5. Analyze & Fix| Gemini
+    Orchestrator <-->|6. Run Tests| Sandbox
+    
+    Orchestrator -->|7. Save Data| Results
+    Results -->|8. Live Updates| Frontend
 ```
 
 ## 🛠️ Tech Stack
