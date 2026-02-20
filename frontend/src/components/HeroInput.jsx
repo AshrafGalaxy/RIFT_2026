@@ -1,16 +1,52 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiGithub, FiUsers, FiUser, FiLoader } from 'react-icons/fi';
+import { FiGithub, FiUsers, FiUser } from 'react-icons/fi';
+import { Rocket, Zap, RefreshCw, FolderOpen, Search, FlaskConical, Bot, Upload, RotateCw, CheckCircle, Loader2 } from 'lucide-react';
 import useAgentStore from '../store/useAgentStore';
 
-const stepIcons = ['📂', '🔍', '🧪', '🤖', '📤', '🔄'];
+const STEPS = [
+    { label: 'Cloning repository', Icon: FolderOpen },
+    { label: 'Discovering tests', Icon: Search },
+    { label: 'Running tests', Icon: FlaskConical },
+    { label: 'Generating fixes', Icon: Bot },
+    { label: 'Pushing to branch', Icon: Upload },
+    { label: 'Monitoring CI/CD', Icon: RotateCw },
+];
 
 export default function HeroInput() {
-    const {
-        repoUrl, teamName, leaderName, isRunning, currentStep, steps,
-        setField, startAgent, loadDemo, reset, result, error,
-    } = useAgentStore();
+    const repoUrl = useAgentStore((s) => s.repoUrl);
+    const teamName = useAgentStore((s) => s.teamName);
+    const leaderName = useAgentStore((s) => s.leaderName);
+    const isRunning = useAgentStore((s) => s.isRunning);
+    const currentStep = useAgentStore((s) => s.currentStep);
+    const result = useAgentStore((s) => s.result);
+    const error = useAgentStore((s) => s.error);
+
+    const setRepoUrl = useAgentStore((s) => s.setRepoUrl);
+    const setTeamName = useAgentStore((s) => s.setTeamName);
+    const setLeaderName = useAgentStore((s) => s.setLeaderName);
+    const maxIterations = useAgentStore((s) => s.maxIterations);
+    const setMaxIterations = useAgentStore((s) => s.setMaxIterations);
+    const startRun = useAgentStore((s) => s.startRun);
+    const loadDemo = useAgentStore((s) => s.loadDemo);
+    const reset = useAgentStore((s) => s.reset);
 
     const canSubmit = repoUrl && teamName && leaderName && !isRunning;
+
+    // Local state for retry input so user can freely type
+    const [retryInput, setRetryInput] = useState(String(maxIterations));
+
+    const handleRetryChange = (e) => {
+        setRetryInput(e.target.value);
+    };
+
+    const handleRetryBlur = () => {
+        let val = parseInt(retryInput, 10);
+        if (isNaN(val) || val < 1) val = 1;
+        if (val > 20) val = 20;
+        setRetryInput(String(val));
+        setMaxIterations(val);
+    };
 
     return (
         <section className="hero-gradient-bg hero-grid-overlay rounded-b-3xl">
@@ -42,7 +78,7 @@ export default function HeroInput() {
                             icon={<FiGithub />}
                             placeholder="GitHub Repository URL"
                             value={repoUrl}
-                            onChange={(v) => setField('repoUrl', v)}
+                            onChange={setRepoUrl}
                             disabled={isRunning}
                         />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -50,15 +86,32 @@ export default function HeroInput() {
                                 icon={<FiUsers />}
                                 placeholder="Team Name"
                                 value={teamName}
-                                onChange={(v) => setField('teamName', v)}
+                                onChange={setTeamName}
                                 disabled={isRunning}
                             />
                             <InputField
                                 icon={<FiUser />}
                                 placeholder="Team Leader Name"
                                 value={leaderName}
-                                onChange={(v) => setField('leaderName', v)}
+                                onChange={setLeaderName}
                                 disabled={isRunning}
+                            />
+                        </div>
+                        {/* Retry limit */}
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card/60 border border-border">
+                            <RefreshCw className="w-4 h-4 text-text-secondary shrink-0" />
+                            <span className="text-text-secondary text-sm whitespace-nowrap">Retry Limit</span>
+                            <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={retryInput}
+                                onChange={handleRetryChange}
+                                onBlur={handleRetryBlur}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                                disabled={isRunning}
+                                className="w-14 bg-transparent border-none outline-none text-text-primary text-sm font-semibold text-center
+                                           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                         </div>
                     </div>
@@ -68,7 +121,7 @@ export default function HeroInput() {
                         <motion.button
                             whileHover={canSubmit ? { scale: 1.02 } : {}}
                             whileTap={canSubmit ? { scale: 0.98 } : {}}
-                            onClick={startAgent}
+                            onClick={startRun}
                             disabled={!canSubmit}
                             className={`flex-1 btn-gradient text-white font-semibold py-3.5 px-6 rounded-xl text-base
               transition-all duration-300 flex items-center justify-center gap-2
@@ -76,11 +129,14 @@ export default function HeroInput() {
                         >
                             {isRunning ? (
                                 <>
-                                    <FiLoader className="animate-spin" />
+                                    <Loader2 className="w-5 h-5 animate-spin" />
                                     Agent Running...
                                 </>
                             ) : (
-                                <>🚀 Analyze Repository</>
+                                <>
+                                    <Rocket className="w-5 h-5" />
+                                    Analyze Repository
+                                </>
                             )}
                         </motion.button>
 
@@ -91,9 +147,10 @@ export default function HeroInput() {
                                 onClick={loadDemo}
                                 className="px-6 py-3.5 rounded-xl border border-border text-text-secondary
                 hover:text-text-primary hover:border-primary transition-all duration-300
-                text-sm font-medium cursor-pointer"
+                text-sm font-medium cursor-pointer flex items-center gap-2"
                             >
-                                ⚡ Load Demo
+                                <Zap className="w-4 h-4" />
+                                Load Demo
                             </motion.button>
                         )}
 
@@ -106,7 +163,8 @@ export default function HeroInput() {
                 hover:bg-accent-green/10 transition-all duration-300
                 text-sm font-medium cursor-pointer flex items-center gap-2"
                             >
-                                🔄 New Run
+                                <RefreshCw className="w-4 h-4" />
+                                New Run
                             </motion.button>
                         )}
                     </div>
@@ -123,8 +181,8 @@ export default function HeroInput() {
                         >
                             <div className="glass rounded-2xl p-6 sm:p-8">
                                 <div className="space-y-3">
-                                    {steps.map((step, i) => (
-                                        <StepRow key={i} index={i} label={step} currentStep={currentStep} icon={stepIcons[i]} />
+                                    {STEPS.map((step, i) => (
+                                        <StepRow key={i} index={i} label={step.label} currentStep={currentStep} Icon={step.Icon} />
                                     ))}
                                 </div>
                             </div>
@@ -157,7 +215,7 @@ function InputField({ icon, placeholder, value, onChange, disabled }) {
     );
 }
 
-function StepRow({ index, label, currentStep, icon }) {
+function StepRow({ index, label, currentStep, Icon }) {
     const isDone = currentStep > index;
     const isActive = currentStep === index;
     const isPending = currentStep < index;
@@ -172,11 +230,13 @@ function StepRow({ index, label, currentStep, icon }) {
         ${isDone ? 'opacity-80' : ''}
         ${isPending ? 'opacity-40' : ''}`}
         >
-            <div className="w-7 h-7 flex items-center justify-center text-lg flex-shrink-0">
-                {isDone ? '✅' : isActive ? (
-                    <FiLoader className="animate-spin text-primary" />
+            <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                {isDone ? (
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                ) : isActive ? (
+                    <Loader2 className="w-5 h-5 text-primary animate-spin" />
                 ) : (
-                    <span className="text-text-muted">{icon}</span>
+                    <Icon className="w-5 h-5 text-text-muted" />
                 )}
             </div>
             <span className={`text-sm font-medium ${isActive ? 'text-text-primary' : isDone ? 'text-accent-green' : 'text-text-muted'}`}>

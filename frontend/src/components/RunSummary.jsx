@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { FiGitBranch, FiCopy, FiExternalLink } from 'react-icons/fi';
+import { ClipboardList, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import useAgentStore from '../store/useAgentStore';
 import { SummarySkeleton } from './Skeletons';
 import { useState, useEffect, useRef } from 'react';
@@ -48,6 +49,7 @@ export default function RunSummary() {
             ? 'bg-accent-yellow/15 text-accent-yellow border border-accent-yellow/30'
             : 'bg-accent-red/15 text-accent-red border border-accent-red/30 glow-red';
 
+    const StatusIcon = isPassed ? CheckCircle : isError ? AlertTriangle : XCircle;
     const badgeLabel = isError ? 'Agent Execution Failure' : `CI/CD: ${status}`;
 
     return (
@@ -57,10 +59,11 @@ export default function RunSummary() {
             transition={{ duration: 0.5 }}
             className="max-w-5xl mx-auto px-4 sm:px-6 pb-8"
         >
-            <div className="glass rounded-2xl overflow-hidden gradient-border-left">
+            <div className="glass rounded-2xl overflow-hidden">
                 <div className="p-6 sm:p-8">
                     <h3 className="text-lg font-bold text-text-primary mb-6 flex items-center gap-2">
-                        📋 Run Summary
+                        <ClipboardList className="w-5 h-5 text-gray-400" />
+                        Run Summary
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -131,8 +134,9 @@ export default function RunSummary() {
                             initial={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
-                            className={`px-8 py-3 rounded-full font-bold text-lg tracking-wider ${badgeClass}`}
+                            className={`px-8 py-3 rounded-full font-bold text-lg tracking-wider flex items-center gap-2 ${badgeClass}`}
                         >
+                            <StatusIcon className="w-5 h-5" />
                             {badgeLabel}
                         </motion.div>
                     </div>

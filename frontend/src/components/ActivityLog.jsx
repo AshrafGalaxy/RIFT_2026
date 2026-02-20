@@ -1,93 +1,128 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useRef } from 'react';
-import { FiChevronDown, FiChevronUp, FiTerminal } from 'react-icons/fi';
-import useAgentStore from '../store/useAgentStore';
+import { useState, useEffect, useRef } from 'react';
+import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { Terminal } from 'lucide-react';
 
-const TYPE_COLORS = {
-    success: 'text-accent-green',
-    error: 'text-accent-red',
-    progress: 'text-accent-yellow',
-    info: 'text-text-secondary',
+const AGENT_COLORS = {
+    'Clone Agent': { bg: 'rgba(59, 130, 246, 0.15)', text: '#3b82f6', border: 'rgba(59, 130, 246, 0.3)' },
+    'Discover Agent': { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', border: 'rgba(168, 85, 247, 0.3)' },
+    'Analyze Agent': { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)' },
+    'Heal Agent': { bg: 'rgba(16, 185, 129, 0.15)', text: '#10b981', border: 'rgba(16, 185, 129, 0.3)' },
+    'Verify Agent': { bg: 'rgba(236, 72, 153, 0.15)', text: '#ec4899', border: 'rgba(236, 72, 153, 0.3)' },
+    'System': { bg: 'rgba(100, 116, 139, 0.15)', text: '#64748b', border: 'rgba(100, 116, 139, 0.3)' },
 };
 
-export default function ActivityLog() {
-    const liveLog = useAgentStore((s) => s.liveLog);
-    const isLogExpanded = useAgentStore((s) => s.isLogExpanded);
-    const toggleLog = useAgentStore((s) => s.toggleLog);
-    const bottomRef = useRef(null);
+const TYPE_CLASSES = {
+    info: 'text-text-secondary',
+    success: 'text-accent-green',
+    error: 'text-accent-red',
+    progress: 'text-primary',
+};
 
+export default function ActivityLog({ logs = [] }) {
+    const [collapsed, setCollapsed] = useState(false);
+    const scrollRef = useRef(null);
+
+    // Auto-scroll to bottom when new logs arrive
     useEffect(() => {
-        if (isLogExpanded && bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (scrollRef.current && !collapsed) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [liveLog, isLogExpanded]);
-
-    if (!liveLog.length) return null;
+    }, [logs, collapsed]);
 
     return (
-        <motion.section
-            initial={{ opacity: 0, y: 30 }}
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="max-w-5xl mx-auto px-4 sm:px-6 pb-8"
+            className="glass rounded-2xl overflow-hidden"
         >
-            <div className="rounded-2xl overflow-hidden border border-border-light" style={{ backgroundColor: 'rgba(8, 6, 14, 0.85)' }}>
-                {/* Header */}
-                <button
-                    onClick={toggleLog}
-                    className="w-full flex items-center justify-between px-6 py-4 cursor-pointer
-            hover:bg-white/[0.02] transition-colors"
-                >
-                    <div className="flex items-center gap-2">
-                        <FiTerminal className="text-primary" />
-                        <h3 className="text-sm font-bold text-text-primary">Live Activity Log</h3>
-                        <span className="bg-primary/20 text-primary-light text-xs px-2 py-0.5 rounded-full">
-                            {liveLog.length}
-                        </span>
-                    </div>
-                    {isLogExpanded ? (
-                        <FiChevronUp className="text-text-muted" />
-                    ) : (
-                        <FiChevronDown className="text-text-muted" />
-                    )}
-                </button>
+            {/* Header — matches other card headers */}
+            <button
+                className="w-full flex items-center justify-between px-6 sm:px-8 py-4 hover:bg-white/5 transition-colors cursor-pointer"
+                onClick={() => setCollapsed((c) => !c)}
+            >
+                <div className="flex items-center gap-2">
+                    <Terminal className="w-5 h-5 text-accent-green" />
+                    <span className="text-lg font-bold text-text-primary">
+                        Live Activity Log
+                    </span>
+                    <span className="text-xs text-text-muted ml-1">
+                        ({logs.length})
+                    </span>
+                </div>
+                {collapsed ? (
+                    <FiChevronDown className="text-text-muted w-5 h-5" />
+                ) : (
+                    <FiChevronUp className="text-text-muted w-5 h-5" />
+                )}
+            </button>
 
-                {/* Log Content */}
-                <AnimatePresence>
-                    {isLogExpanded && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="overflow-hidden"
+            <AnimatePresence>
+                {!collapsed && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <div
+                            ref={scrollRef}
+                            className="px-6 sm:px-8 pb-6 max-h-80 overflow-y-auto font-mono text-xs space-y-1.5"
+                            style={{ scrollBehavior: 'smooth' }}
                         >
-                            <div className="max-h-72 overflow-y-auto px-6 pb-4 font-mono text-xs leading-relaxed space-y-0.5">
-                                {liveLog.map((log, i) => {
-                                    const time = new Date(log.timestamp).toLocaleTimeString([], {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        second: '2-digit',
-                                    });
+                            {logs.length === 0 ? (
+                                <p className="text-text-muted py-4 text-center">
+                                    Waiting for pipeline to start...
+                                </p>
+                            ) : (
+                                logs.map((entry, i) => {
+                                    const agentStyle = entry.agent
+                                        ? AGENT_COLORS[entry.agent] || AGENT_COLORS['System']
+                                        : null;
+                                    const typeClass = TYPE_CLASSES[entry.type] || TYPE_CLASSES.info;
+                                    const ts = entry.timestamp
+                                        ? new Date(entry.timestamp).toLocaleTimeString()
+                                        : '';
+
                                     return (
-                                        <motion.div
+                                        <div
                                             key={i}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: 0.02 * Math.min(i, 20) }}
-                                            className={`${TYPE_COLORS[log.type] || 'text-text-secondary'} py-0.5`}
+                                            className="flex items-start gap-2 py-0.5 leading-snug"
                                         >
-                                            <span className="text-text-muted mr-2">[{time}]</span>
-                                            {log.message}
-                                        </motion.div>
+                                            {/* Timestamp */}
+                                            {ts && (
+                                                <span className="text-text-muted shrink-0 w-[4.5rem] text-right tabular-nums">
+                                                    {ts}
+                                                </span>
+                                            )}
+
+                                            {/* Agent badge */}
+                                            {entry.agent && agentStyle && (
+                                                <span
+                                                    className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none"
+                                                    style={{
+                                                        backgroundColor: agentStyle.bg,
+                                                        color: agentStyle.text,
+                                                        border: `1px solid ${agentStyle.border}`,
+                                                    }}
+                                                >
+                                                    {entry.agent}
+                                                </span>
+                                            )}
+
+                                            {/* Message */}
+                                            <span className={`${typeClass} break-words min-w-0`}>
+                                                {entry.message}
+                                            </span>
+                                        </div>
                                     );
-                                })}
-                                <div ref={bottomRef} />
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-        </motion.section>
+                                })
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
     );
 }

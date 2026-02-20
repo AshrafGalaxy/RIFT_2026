@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { FiChevronUp, FiChevronDown, FiChevronsUp } from 'react-icons/fi';
+import { Wrench, CheckCircle, XCircle, Settings } from 'lucide-react';
 import useAgentStore from '../store/useAgentStore';
 import { FixesSkeleton } from './Skeletons';
 
@@ -41,7 +42,11 @@ export default function FixesTable() {
     const [sortKey, setSortKey] = useState(null);
     const [sortDir, setSortDir] = useState('asc');
 
-    const fixes = result?.fixes || [];
+    const fixes = (result?.fixes || []).map(f => ({
+        ...f,
+        bug_type: String(f.bug_type || '').toUpperCase().replace('BUGTYPE.', ''),
+        status: String(f.status || 'PENDING').toUpperCase().replace('FIXSTATUS.', '')
+    }));
 
     const sorted = useMemo(() => {
         const filtered = fixFilterType === 'ALL'
@@ -76,11 +81,12 @@ export default function FixesTable() {
             >
                 <div className="glass rounded-2xl p-6 sm:p-8">
                     <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                        🔧 Fixes Applied
+                        <Wrench className="w-5 h-5 text-blue-400" />
+                        Fixes Applied
                         <span className="bg-primary/20 text-primary-light text-xs px-2.5 py-0.5 rounded-full font-medium">0</span>
                     </h3>
                     <div className="text-center py-8">
-                        <p className="text-3xl mb-3">🛠️</p>
+                        <Settings className="w-10 h-10 text-text-muted mx-auto mb-3" />
                         <p className="text-text-secondary text-sm">
                             {result.final_status === 'ERROR'
                                 ? 'No fixes were applied — the agent encountered an error during execution.'
@@ -112,7 +118,8 @@ export default function FixesTable() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                     <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
-                        🔧 Fixes Applied
+                        <Wrench className="w-5 h-5 text-blue-400" />
+                        Fixes Applied
                         <span className="bg-primary/20 text-primary-light text-xs px-2.5 py-0.5 rounded-full font-medium">
                             {result.fixes.length}
                         </span>
@@ -177,10 +184,12 @@ export default function FixesTable() {
                                         <CommitMessage message={fix.commit_message} />
                                     </td>
                                     <td className="py-3 px-4 text-center">
-                                        {fix.status === 'Fixed' ? (
-                                            <span className="text-accent-green text-sm" title="Fixed">✅</span>
+                                        {fix.status === 'VERIFIED' ? (
+                                            <CheckCircle className="w-4 h-4 text-green-400 inline-block" title="Verified" />
+                                        ) : fix.status === 'APPLIED' || fix.status === 'PENDING' ? (
+                                            <Wrench className="w-4 h-4 text-blue-400 inline-block" title="Applied" />
                                         ) : (
-                                            <span className="text-accent-red text-sm" title="Failed">❌</span>
+                                            <XCircle className="w-4 h-4 text-red-400 inline-block" title="Failed" />
                                         )}
                                     </td>
                                 </motion.tr>

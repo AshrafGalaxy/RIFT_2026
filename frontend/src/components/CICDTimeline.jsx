@@ -1,45 +1,18 @@
 import { motion } from 'framer-motion';
+import { GitCommit, CheckCircle, XCircle, AlertTriangle, Clock, ArrowRight } from 'lucide-react';
 import useAgentStore from '../store/useAgentStore';
-import { TimelineSkeleton } from './Skeletons';
 
-export default function CICDTimeline() {
+export default function CICDTimeline({ iterations = [] }) {
     const result = useAgentStore((s) => s.result);
     const isRunning = useAgentStore((s) => s.isRunning);
-    if (isRunning && !result) return <TimelineSkeleton />;
-    if (!result) return null;
 
-    const cicdRuns = result.cicd_runs || [];
-    const totalRuns = cicdRuns.length;
-    const maxRuns = 5;
-    const overallStatus = result.final_status;
-    const isOverallPassed = overallStatus === 'PASSED';
-    const isOverallError = overallStatus === 'ERROR';
+    // Only healing iterations (number >= 1)
+    const healingRuns = iterations.filter((iter) => iter.number >= 1);
 
-    // If there are no iterations and the pipeline errored, show a clear message
-    if (totalRuns === 0) {
-        return (
-            <motion.section
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="max-w-5xl mx-auto px-4 sm:px-6 pb-8"
-            >
-                <div className="glass rounded-2xl p-6 sm:p-8">
-                    <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                        🔄 CI/CD Timeline
-                    </h3>
-                    <div className="text-center py-8">
-                        <p className="text-3xl mb-3">⚠️</p>
-                        <p className="text-text-secondary text-sm">
-                            {isOverallError
-                                ? 'Agent failed before any CI/CD iterations could run.'
-                                : 'No CI/CD iterations recorded.'}
-                        </p>
-                    </div>
-                </div>
-            </motion.section>
-        );
-    }
+    const lastRun = healingRuns.length > 0 ? healingRuns[healingRuns.length - 1] : null;
+    const overallPassed = lastRun?.status === 'PASSED' || (lastRun?.failed === 0 && lastRun?.total > 0);
+
+    if (!result && !isRunning) return null;
 
     return (
         <motion.section
@@ -48,78 +21,120 @@ export default function CICDTimeline() {
             transition={{ duration: 0.5 }}
             className="max-w-5xl mx-auto px-4 sm:px-6 pb-8"
         >
-            <div className="glass rounded-2xl p-6 sm:p-8">
-                <h3 className="text-lg font-bold text-text-primary mb-8 flex items-center gap-2">
-                    🔄 CI/CD Timeline
-                </h3>
+            <div className="glass rounded-2xl overflow-hidden">
+                <div className="p-6 sm:p-8">
+                    {/* Header */}
+                    <h3 className="text-lg font-bold text-text-primary mb-6 flex items-center gap-2">
+                        <GitCommit className="w-5 h-5 text-primary" />
+                        CI/CD Pipeline Timeline
+                        <span className="text-xs text-text-muted font-normal ml-auto">
+                            {healingRuns.length} {healingRuns.length === 1 ? 'iteration' : 'iterations'}
+                        </span>
+                    </h3>
 
-                {/* Timeline */}
-                <div className="overflow-x-auto pb-4">
-                    <div className="flex items-center min-w-max px-4">
-                        {cicdRuns.map((run, i) => {
-                            const isPassed = run.status === 'PASSED';
-                            const time = new Date(run.timestamp * 1000);
-                            const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    {/* Empty state */}
+                    {healingRuns.length === 0 ? (
+                        <div className="text-center py-8">
+                            <Clock className="w-8 h-8 text-text-muted mx-auto mb-2" />
+                            <p className="text-text-muted text-sm">
+                                {isRunning
+                                    ? 'Pipeline is running — iterations will appear here...'
+                                    : 'No healing iterations recorded.'}
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Horizontal scrolling cards */}
+                            <div className="flex gap-3 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-thin">
+                                {healingRuns.map((iter, idx) => {
+                                    const isPassed = iter.status === 'PASSED' || (iter.failed === 0 && iter.total > 0);
 
-                            return (
-                                <div key={i} className="flex items-center">
-                                    {/* Node */}
-                                    <motion.div
-                                        initial={{ scale: 0, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        transition={{ delay: i * 0.15, type: 'spring', stiffness: 200 }}
-                                        className={`flex flex-col items-center min-w-[120px] sm:min-w-[140px]`}
-                                    >
-                                        {/* Card */}
-                                        <div
-                                            className={`rounded-xl p-4 border text-center w-full transition-all duration-300
-                        ${isPassed
-                                                    ? 'bg-accent-green/5 border-accent-green/30 glow-green'
-                                                    : 'bg-accent-red/5 border-accent-red/30'
-                                                }`}
-                                        >
-                                            <p className="text-text-muted text-xs mb-2">Iteration {run.iteration}/{maxRuns}</p>
-                                            <div className="text-3xl mb-2">{isPassed ? '✅' : '❌'}</div>
-                                            <p className={`font-bold text-sm ${isPassed ? 'text-accent-green' : 'text-accent-red'}`}>
-                                                {run.status}
-                                            </p>
-                                            {run.failures > 0 && (
-                                                <p className="text-text-muted text-xs mt-1">{run.failures} failure{run.failures > 1 ? 's' : ''}</p>
+                                    return (
+                                        <div key={iter.number} className="flex items-center gap-2 shrink-0">
+                                            {/* Card */}
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.9 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ delay: idx * 0.1 }}
+                                                className={`
+                          relative rounded-xl border px-4 py-3 min-w-[140px]
+                          ${isPassed
+                                                        ? 'bg-accent-green/10 border-accent-green/30'
+                                                        : 'bg-accent-red/10 border-accent-red/30'
+                                                    }
+                        `}
+                                            >
+                                                {/* Top row: iteration + icon */}
+                                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                    <span className="text-sm font-bold text-text-primary">
+                                                        #{iter.number}
+                                                    </span>
+                                                    {isPassed ? (
+                                                        <CheckCircle className="w-4 h-4 text-accent-green" />
+                                                    ) : (
+                                                        <XCircle className="w-4 h-4 text-accent-red" />
+                                                    )}
+                                                </div>
+
+                                                {/* Test counts */}
+                                                <div className="text-xs space-y-0.5">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-text-muted">Passed</span>
+                                                        <span className="text-accent-green font-semibold">{iter.passed}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-text-muted">Failed</span>
+                                                        <span className="text-accent-red font-semibold">{iter.failed}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-text-muted">Total</span>
+                                                        <span className="text-text-primary font-semibold">{iter.total}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Fixes info */}
+                                                {iter.fixes_applied > 0 && (
+                                                    <div className="mt-1.5 pt-1.5 border-t border-border text-[10px] text-text-muted">
+                                                        {iter.fixes_applied} fix(es) applied
+                                                    </div>
+                                                )}
+
+                                                {/* Timestamp */}
+                                                {iter.timestamp && (
+                                                    <div className="mt-1 text-[10px] text-text-muted tabular-nums">
+                                                        {new Date(iter.timestamp).toLocaleTimeString()}
+                                                    </div>
+                                                )}
+                                            </motion.div>
+
+                                            {/* Arrow between cards */}
+                                            {idx < healingRuns.length - 1 && (
+                                                <ArrowRight className="w-4 h-4 text-text-muted shrink-0" />
                                             )}
-                                            <p className="text-text-muted text-xs mt-1">{timeStr}</p>
                                         </div>
-                                    </motion.div>
+                                    );
+                                })}
+                            </div>
 
-                                    {/* Connector */}
-                                    {i < cicdRuns.length - 1 && (
-                                        <motion.div
-                                            initial={{ scaleX: 0 }}
-                                            animate={{ scaleX: 1 }}
-                                            transition={{ delay: i * 0.15 + 0.1, duration: 0.3 }}
-                                            className="h-0.5 w-8 sm:w-12 bg-gradient-to-r from-primary/40 to-primary/20 origin-left flex-shrink-0"
-                                        />
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                            {/* Summary footer */}
+                            <div
+                                className={`mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium ${overallPassed
+                                    ? 'bg-accent-green/10 border border-accent-green/20 text-accent-green'
+                                    : 'bg-accent-red/10 border border-accent-red/20 text-accent-red'
+                                    }`}
+                            >
+                                {overallPassed ? (
+                                    <CheckCircle className="w-4 h-4 shrink-0" />
+                                ) : (
+                                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                                )}
+                                {overallPassed
+                                    ? `All tests passed on iteration ${lastRun.number}`
+                                    : `${lastRun.failed} test(s) still failing after ${healingRuns.length} iteration(s)`}
+                            </div>
+                        </>
+                    )}
                 </div>
-
-                {/* Summary text — respects overall status, not individual iteration status */}
-                <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="text-center text-text-secondary text-sm mt-4"
-                >
-                    Completed in <span className="text-text-primary font-semibold">{totalRuns} iteration{totalRuns > 1 ? 's' : ''}</span> out of {maxRuns}
-                    {isOverallPassed && (
-                        <span className="text-accent-green"> — Pipeline Healed ✅</span>
-                    )}
-                    {isOverallError && (
-                        <span className="text-accent-red"> — Pipeline Failed ❌</span>
-                    )}
-                </motion.p>
             </div>
         </motion.section>
     );

@@ -162,16 +162,28 @@ class AnalyzeAgent:
         for block in failure_blocks:
             # Find error lines (E   ErrorType: message)
             err_match = re.search(r'E\s+(\w+(?:Error|Exception)):\s*(.+)', block)
+            
+            # Also catch bare assertion failures: "E       assert 120 == 80"
+            assert_match = None
             if not err_match:
+                assert_match = re.search(r'E\s+(assert\s+.+)', block)
+            
+            if not err_match and not assert_match:
                 continue
 
-            err_type = err_match.group(1)
-            err_msg = err_match.group(2).strip()
-            full_msg = f"{err_type}: {err_msg}"
+            if err_match:
+                err_type = err_match.group(1)
+                err_msg = err_match.group(2).strip()
+                full_msg = f"{err_type}: {err_msg}"
+            else:
+                err_type = "AssertionError"
+                err_msg = assert_match.group(1).strip()
+                full_msg = f"AssertionError: {err_msg}"
 
             # Skip SyntaxError — already caught by py_compile scan
-            if err_type in ("SyntaxError", "IndentationError", "TabError"):
-                continue
+            # BUT: if py_compile missed it (e.g. dynamic exec), we MUST catch it here.
+            # The 'seen' set logic handles dedup if py_compile already caught it.
+            pass
 
             # Find file:line references
             frame_refs = re.findall(r'([\w\\/._-]+\.py):(\d+):', block)
@@ -208,8 +220,8 @@ class AnalyzeAgent:
                 err_type = match.group(2)
                 err_msg = match.group(3).strip()
 
-                if err_type in ("SyntaxError", "IndentationError"):
-                    continue
+                # if err_type in ("SyntaxError", "IndentationError"):
+                #     continue
 
                 file_path = self._relativize(file_path, repo_path)
                 bug_type = self._classify_runtime_error(err_type, f"{err_type}: {err_msg}")
@@ -235,8 +247,8 @@ class AnalyzeAgent:
 
                 if "site-packages" in file_path:
                     continue
-                if err_type in ("SyntaxError", "IndentationError"):
-                    continue
+                # if err_type in ("SyntaxError", "IndentationError"):
+                #     continue
 
                 file_path = self._relativize(file_path, repo_path)
                 bug_type = self._classify_runtime_error(err_type, f"{err_type}: {err_msg}")

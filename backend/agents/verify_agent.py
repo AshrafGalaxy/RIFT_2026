@@ -31,10 +31,10 @@ class VerifyAgent:
         output = self._discover.run(repo_path)
 
         if output.exit_code == 0 and output.failed == 0:
-            logger.info("✅ All tests PASSED!")
+            logger.info("All tests PASSED!")
         else:
             logger.info(
-                f"❌ Tests still failing: {output.failed} failed, "
+                f"Tests still failing: {output.failed} failed, "
                 f"{output.passed} passed"
             )
 

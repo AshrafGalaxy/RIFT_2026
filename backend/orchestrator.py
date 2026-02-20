@@ -8,7 +8,7 @@ import logging
 import time
 from datetime import datetime
 
-from config import MAX_ITERATIONS
+from config import MAX_ITERATIONS  # used only as fallback default
 from models import (
     Fix,
     FixStatus,
@@ -106,9 +106,10 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         # ========== STEP 3-5: HEALING LOOP ==========
         current_output = test_output
 
-        for i in range(1, MAX_ITERATIONS + 1):
+        max_iters = getattr(request, 'max_iterations', MAX_ITERATIONS)
+        for i in range(1, max_iters + 1):
             logger.info("=" * 60)
-            logger.info(f"HEALING ITERATION {i}/{MAX_ITERATIONS}")
+            logger.info(f"HEALING ITERATION {i}/{max_iters}")
             logger.info("=" * 60)
 
             # --- ANALYZE ---

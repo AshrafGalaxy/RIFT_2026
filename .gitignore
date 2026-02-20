@@ -29,3 +29,7 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Temp / stale folders
+error-main/
+.gemini/

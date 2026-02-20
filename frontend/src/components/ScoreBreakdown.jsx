@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Trophy, Target, Zap, TrendingDown, BarChart3 } from 'lucide-react';
 import useAgentStore from '../store/useAgentStore';
 import { ScoreSkeleton } from './Skeletons';
 
@@ -12,10 +13,10 @@ export default function ScoreBreakdown() {
 
     const { base, speed_bonus, efficiency_penalty, total } = result.score;
     const isError = result.final_status === 'ERROR';
-    const isFailed = result.final_status === 'FAILED';
 
-    // If ERROR/FAILED with 0 scores, show a descriptive empty state instead of confusing zero-ring
-    if ((isError || isFailed) && total === 0) {
+    // Only show the empty state if the agent truly crashed (ERROR status with 0 score)
+    // and no fixes were applied at all.
+    if (isError && total === 0 && base === 0) {
         return (
             <motion.section
                 initial={{ opacity: 0, y: 30 }}
@@ -25,14 +26,13 @@ export default function ScoreBreakdown() {
             >
                 <div className="glass rounded-2xl p-6 sm:p-8">
                     <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                        🏆 Score Breakdown
+                        <Trophy className="w-5 h-5 text-yellow-500" />
+                        Score Breakdown
                     </h3>
                     <div className="text-center py-8">
-                        <p className="text-3xl mb-3">📊</p>
+                        <BarChart3 className="w-10 h-10 text-text-muted mx-auto mb-3" />
                         <p className="text-text-secondary text-sm">
-                            {isError
-                                ? 'No score available — the agent encountered an error before completing the pipeline.'
-                                : 'No score available — the pipeline completed but could not fix the failures.'}
+                            No score available — the agent encountered an error before completing the pipeline.
                         </p>
                         <p className="text-text-muted text-xs mt-2">Score: 0 / 120</p>
                     </div>
@@ -57,7 +57,8 @@ export default function ScoreBreakdown() {
         >
             <div className="glass rounded-2xl p-6 sm:p-8">
                 <h3 className="text-lg font-bold text-text-primary mb-8 flex items-center gap-2">
-                    🏆 Score Breakdown
+                    <Trophy className="w-5 h-5 text-yellow-500" />
+                    Score Breakdown
                 </h3>
 
                 {/* Ring + Cards */}
@@ -68,21 +69,21 @@ export default function ScoreBreakdown() {
                     {/* Score Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
                         <ScoreCard
-                            icon="🎯"
+                            icon={<Target className="w-6 h-6 text-purple-400" />}
                             label="Base Score"
                             value={`${base} pts`}
                             desc="Full test resolution"
                             colorClass="from-primary/20 to-primary-dark/20 border-primary/30"
                         />
                         <ScoreCard
-                            icon="⚡"
+                            icon={<Zap className="w-6 h-6 text-green-400" />}
                             label="Speed Bonus"
                             value={speed_bonus > 0 ? `+${speed_bonus}` : '0'}
                             desc="Completed in < 5 min"
                             colorClass="from-accent-green/20 to-accent-green/5 border-accent-green/30"
                         />
                         <ScoreCard
-                            icon="📊"
+                            icon={<TrendingDown className="w-6 h-6 text-red-400" />}
                             label="Efficiency Penalty"
                             value={efficiency_penalty > 0 ? `-${efficiency_penalty}` : '0'}
                             desc="-2 per commit > 20"
@@ -163,7 +164,6 @@ function AnimatedScoreRing({ score }) {
         const animate = (ts) => {
             if (!start) start = ts;
             const progress = Math.min((ts - start) / duration, 1);
-            // Cubic ease-out: decelerates smoothly to rest
             const eased = 1 - Math.pow(1 - progress, 3);
             setDisplayScore(Math.round(eased * score));
             if (progress < 1) {
@@ -177,9 +177,7 @@ function AnimatedScoreRing({ score }) {
     return (
         <div className="relative w-48 h-48 sm:w-56 sm:h-56">
             <svg viewBox="0 0 200 200" className="w-full h-full -rotate-90">
-                {/* Background ring */}
                 <circle cx="100" cy="100" r={r} fill="none" stroke="rgba(124,58,237,0.1)" strokeWidth="12" />
-                {/* Progress ring */}
                 <motion.circle
                     cx="100" cy="100" r={r}
                     fill="none"
@@ -207,7 +205,7 @@ function ScoreCard({ icon, label, value, desc, colorClass }) {
             whileHover={{ y: -2, scale: 1.01 }}
             className={`bg-gradient-to-br ${colorClass} border rounded-xl p-4 text-center transition-all duration-300`}
         >
-            <span className="text-2xl">{icon}</span>
+            <div className="flex justify-center">{icon}</div>
             <p className="text-text-secondary text-xs mt-2 uppercase tracking-wider">{label}</p>
             <p className="text-text-primary text-2xl font-bold mt-1">{value}</p>
             <p className="text-text-muted text-xs mt-1">{desc}</p>

@@ -20,7 +20,7 @@ load_dotenv()
 
 from crewai import Agent, Crew, Task, Process
 
-from config import MAX_ITERATIONS
+from config import MAX_ITERATIONS  # used only as fallback default
 from models import (
     Fix,
     FixStatus,
@@ -118,17 +118,21 @@ def create_agents(llm_model: str) -> dict:
 
 # ===================== FAST DIRECT PIPELINE =====================
 
-async def run_pipeline(request: RunRequest) -> RunResult:
+async def run_pipeline(request: RunRequest, sse=None) -> RunResult:
     """
     Execute the self-healing pipeline using direct agent calls.
 
     This is the FAST path that calls regex-based agents directly,
     bypassing CrewAI LLM overhead.  Total time: ~30-90 seconds.
 
+    Args:
+        request: RunRequest with repo_url, team_name, leader_name
+        sse: Optional SSEManager for real-time streaming
+
     Pipeline:
     1. Clone Agent clones the repo
     2. Discover Agent runs tests
-    3. Loop up to MAX_ITERATIONS:
+    3. Loop up to max_iterations (configurable, default 5):
        a. Analyze Agent classifies errors (with root cause tracing)
        b. Heal Agent applies fixes
        c. Verify Agent re-runs tests
@@ -150,6 +154,19 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         started_at=started_at,
     )
 
+    # Helper: emit SSE events safely
+    def emit_step(name, index, msg=""):
+        if sse:
+            sse.step(name, index, msg)
+
+    def emit_agent(agent_name, msg, msg_type="info"):
+        if sse:
+            sse.agent(agent_name, msg, msg_type)
+
+    def emit_log(msg, msg_type="info"):
+        if sse:
+            sse.log(msg, msg_type)
+
     try:
         # Register CrewAI agents for hackathon compliance (non-blocking)
         llm_model = _get_llm_config()
@@ -162,28 +179,31 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         logger.info("=" * 60)
         logger.info("STEP 1: CLONE REPOSITORY")
         logger.info("=" * 60)
+        emit_step("Cloning repository", 0, f"Cloning {request.repo_url}...")
+        emit_agent("Clone Agent", f"Cloning {request.repo_url}...", "progress")
 
         repo_path = clone_agent.run(request.repo_url, request.team_name)
         logger.info(f"Repo cloned to: {repo_path}")
+        emit_agent("Clone Agent", f"Repository cloned to {repo_path}", "success")
 
         # ========== STEP 2: DISCOVER & RUN TESTS (direct) ==========
         logger.info("=" * 60)
         logger.info("STEP 2: DISCOVER & RUN TESTS")
         logger.info("=" * 60)
+        emit_step("Discovering tests", 1, "Scanning project for test framework...")
+        emit_agent("Discover Agent", "Scanning project type and test framework...", "progress")
 
         test_output = discover_agent.run(repo_path)
 
-        initial_iteration = Iteration(
-            number=0,
-            passed=test_output.passed,
-            failed=test_output.failed,
-            total=test_output.total,
-            status=RunStatus.PASSED if (test_output.failed == 0 and test_output.total > 0) else RunStatus.FAILED,
-            stdout=test_output.stdout[:2000],
-            stderr=test_output.stderr[:2000],
-            timestamp=now_iso(),
-        )
-        iterations.append(initial_iteration)
+        emit_agent("Discover Agent",
+                    f"Found {test_output.total} tests ({test_output.framework}) — "
+                    f"{test_output.passed} passed, {test_output.failed} failed",
+                    "success" if test_output.failed == 0 else "error")
+
+        # Store initial test result as metadata (NOT as iteration 0 on timeline)
+        initial_failed = test_output.failed
+        initial_passed = test_output.passed
+        initial_total = test_output.total
 
         logger.info(f"Initial: {test_output.passed} passed, {test_output.failed} failed, {test_output.total} total")
 
@@ -191,19 +211,26 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         stderr_lower = test_output.stderr.lower()
         if 'no module named pytest' in stderr_lower or 'no module named' in stderr_lower:
             logger.warning("Test environment broken — forcing failed status")
+            emit_agent("Discover Agent", "Test environment issue detected — forcing failed status", "error")
             test_output.failed = max(test_output.failed, 1)
             test_output.exit_code = 1
 
         # Already passing?
         if test_output.failed == 0 and test_output.exit_code == 0 and test_output.total > 0:
             logger.info("All tests PASS — no healing needed!")
+            emit_agent("Discover Agent", "All tests already pass — no healing needed!", "success")
             elapsed = time.time() - start_time
             result.status = RunStatus.PASSED
             result.iterations = iterations
             result.score = compute_score(0, elapsed, True)
             result.finished_at = now_iso()
             results_service.save(result)
+            if sse:
+                sse.result(result.model_dump(mode="json"))
+                sse.done()
             return result
+
+        emit_log(f"Initial test run: {initial_failed} failures out of {initial_total} tests", "error")
 
         # ========== HEALING LOOP (direct agents — fast) ==========
         current_stdout = _strip_install_noise(test_output.stdout)
@@ -214,19 +241,25 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         current_failed = test_output.failed
         current_total = test_output.total
 
-        for i in range(1, MAX_ITERATIONS + 1):
+        max_iters = getattr(request, 'max_iterations', MAX_ITERATIONS)
+        for i in range(1, max_iters + 1):
             iter_start = time.time()
             logger.info("=" * 60)
-            logger.info(f"HEALING ITERATION {i}/{MAX_ITERATIONS}")
+            logger.info(f"HEALING ITERATION {i}/{max_iters}")
             logger.info("=" * 60)
 
+            emit_step("Running tests", 2, f"Healing iteration {i}/{max_iters}")
+            emit_log(f"--- Healing Iteration {i}/{max_iters} ---", "info")
+
             # --- ANALYZE (direct) ---
+            emit_agent("Analyze Agent", f"Scanning for errors (iteration {i})...", "progress")
             error_objs = analyze_agent.run(
                 current_stdout, current_stderr, current_framework, repo_path
             )
 
             if not error_objs:
                 logger.info(f"[Iter {i}] No errors detected — but tests still failing.")
+                emit_agent("Analyze Agent", "No obvious errors found — trying broader analysis...", "progress")
                 # Try a broader analysis by combining stdout+stderr
                 error_objs = analyze_agent.run(
                     current_stdout + "\n" + current_stderr, "",
@@ -234,22 +267,32 @@ async def run_pipeline(request: RunRequest) -> RunResult:
                 )
 
             if not error_objs:
-                logger.info(f"[Iter {i}] No errors found at all, stopping.")
-                iter_result = Iteration(
-                    number=i, passed=current_passed, failed=current_failed,
-                    total=current_total, errors_found=0, fixes_applied=0,
-                    status=RunStatus.FAILED,
-                    stdout=current_stdout[:2000], stderr=current_stderr[:2000],
-                    timestamp=now_iso(),
-                )
-                iterations.append(iter_result)
+                logger.info(f"[Iter {i}] No fixable errors found — remaining {current_failed} failure(s) are likely logic/runtime issues beyond auto-fix.")
+                emit_agent("Analyze Agent",
+                    f"No more auto-fixable errors found. The remaining {current_failed} failure(s) "
+                    f"appear to be logic or runtime issues that require manual review.",
+                    "info")
+                emit_log(
+                    f"Healing stopped: {current_passed}/{current_total} tests passing. "
+                    f"Remaining {current_failed} failure(s) need manual attention.",
+                    "info")
+                # Don't record a bogus iteration — just exit cleanly
                 break
 
             logger.info(f"[Iter {i}] Found {len(error_objs)} error(s)")
+            emit_agent("Analyze Agent",
+                        f"Found {len(error_objs)} error(s): " +
+                        ", ".join(f"{e.bug_type}" for e in error_objs[:5]),
+                        "info")
+
             for e in error_objs:
                 logger.info(f"  -> {e.bug_type}: {e.file}:{e.line_number} — {e.message[:60]}")
+                emit_log(f"  {e.bug_type}: {e.file}:{e.line_number} — {e.message[:80]}", "info")
 
             # --- HEAL (direct) ---
+            emit_step("Generating fixes", 3, f"Applying fixes for {len(error_objs)} errors...")
+            emit_agent("Heal Agent", f"Generating fixes for {len(error_objs)} errors...", "progress")
+
             fix_objs, branch_name, new_commits = heal_agent.run(
                 repo_path, error_objs, request.team_name,
                 request.leader_name, i
@@ -257,11 +300,42 @@ async def run_pipeline(request: RunRequest) -> RunResult:
 
             for f in fix_objs:
                 all_fixes.append(f)
+                status_str = "Applied" if f.status == FixStatus.APPLIED else "Failed"
+                emit_log(f"  Fix {status_str}: {f.bug_type} in {f.file}:{f.line_number}", 
+                         "success" if f.status == FixStatus.APPLIED else "error")
+
             total_commits += new_commits
+
+            applied = sum(1 for f in fix_objs if f.status == FixStatus.APPLIED)
+            failed_fixes = len(fix_objs) - applied
+            emit_agent("Heal Agent",
+                        f"Applied {applied} fix(es), {failed_fixes} failed",
+                        "success" if applied > 0 else "error")
 
             logger.info(f"[Iter {i}] Applied {new_commits} fix(es)")
 
+            if new_commits == 0:
+                logger.warning(f"[Iter {i}] Found {len(error_objs)} errors but applied 0 fixes. Stopping to avoid infinite loop.")
+                emit_log(f"Heal Agent could not generate fixes for the {len(error_objs)} detected error(s). Stopping healing loop.", "error")
+                # We need to record this failed iteration so the timeline skips to verifying or just stops?
+                # Actually, if we break here, we skip 'Pushing' and 'Verify'.
+                # But we should probably run Verify one last time or just record the state?
+                # If we don't verify, we don't get the 'Iteration X' card.
+                # Let's force a 'Verify' on the current state (which is same as previous) or just exit?
+                # Better to exit, but we want to show the 'FAILED' status for this iteration.
+                # Let's continue to VERIFY (it will fail same way) but then check applied count at end?
+                # No, if we continue to verify, we waste time.
+                # Let's break, but we need to ensure the result is saved.
+                break
+
+            # --- Push fixes ---
+            emit_step("Pushing to branch", 4, f"Pushing {new_commits} commit(s) to {branch_name}...")
+            emit_agent("Heal Agent", f"Pushing {new_commits} commit(s) to {branch_name}...", "progress")
+
             # --- VERIFY (direct) ---
+            emit_step("Monitoring CI/CD", 5, f"Re-running tests after fixes (iteration {i})...")
+            emit_agent("Verify Agent", "Re-running test suite to verify fixes...", "progress")
+
             v_output = verify_agent.run(repo_path)
 
             current_stdout = _strip_install_noise(v_output.stdout)
@@ -273,6 +347,8 @@ async def run_pipeline(request: RunRequest) -> RunResult:
 
             applied_count = sum(1 for f in fix_objs if f.status == FixStatus.APPLIED)
 
+            iter_status = RunStatus.PASSED if (current_failed == 0 and current_total > 0) else RunStatus.FAILED
+
             iter_result = Iteration(
                 number=i,
                 passed=current_passed,
@@ -280,7 +356,7 @@ async def run_pipeline(request: RunRequest) -> RunResult:
                 total=current_total,
                 errors_found=len(error_objs),
                 fixes_applied=applied_count,
-                status=RunStatus.PASSED if (current_failed == 0 and current_total > 0) else RunStatus.FAILED,
+                status=iter_status,
                 stdout=current_stdout[:2000],
                 stderr=current_stderr[:2000],
                 timestamp=now_iso(),
@@ -290,14 +366,24 @@ async def run_pipeline(request: RunRequest) -> RunResult:
             iter_elapsed = time.time() - iter_start
             logger.info(f"[Iter {i}] {current_passed} passed, {current_failed} failed ({iter_elapsed:.1f}s)")
 
+            emit_agent("Verify Agent",
+                        f"Results: {current_passed} passed, {current_failed} failed ({iter_elapsed:.1f}s)",
+                        "success" if current_failed == 0 else "error")
+
+            if sse:
+                new_fixes_json = [f.model_dump(mode="json") for f in fix_objs]
+                sse.iteration(i, current_passed, current_failed, current_total, iter_status.value, applied_count, new_fixes_json)
+
             if current_failed == 0 and current_exit_code == 0 and current_total > 0:
                 logger.info(f"ALL TESTS PASSED on iteration {i}!")
+                emit_agent("Verify Agent", f"All tests PASSED on iteration {i}!", "success")
                 for fix in all_fixes:
                     if fix.status == FixStatus.APPLIED:
                         fix.status = FixStatus.VERIFIED
                 break
             else:
                 logger.info(f"[Iter {i}] Still {current_failed} failure(s), continuing...")
+                emit_log(f"Still {current_failed} failure(s) remaining — continuing to next iteration", "error")
 
         # ========== FINALIZE ==========
         elapsed = time.time() - start_time
@@ -316,6 +402,9 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         logger.info(f"Time: {elapsed:.1f}s | Iterations: {len(iterations)}")
         logger.info("=" * 60)
 
+        emit_log(f"Pipeline complete: {result.status.value} — Score: {result.score}/120 in {elapsed:.1f}s",
+                 "success" if all_passed else "error")
+
     except Exception as e:
         logger.error(f"Pipeline error: {e}", exc_info=True)
         result.status = RunStatus.ERROR
@@ -324,8 +413,15 @@ async def run_pipeline(request: RunRequest) -> RunResult:
         result.iterations = iterations
         result.fixes = all_fixes
         result.score = 0
+        if sse:
+            sse.error(str(e))
 
     results_service.save(result)
+
+    if sse:
+        sse.result(result.model_dump(mode="json"))
+        sse.done()
+
     return result
 
 

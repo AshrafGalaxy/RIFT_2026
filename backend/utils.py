@@ -65,8 +65,8 @@ def compute_score(
 
 
 def now_iso() -> str:
-    """Return current UTC time as ISO string."""
-    return datetime.utcnow().isoformat()
+    """Return current local time as ISO string."""
+    return datetime.now().isoformat()
 
 
 def format_commit_message(bug_type: str, file: str, line: int) -> str:

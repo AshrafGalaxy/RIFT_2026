@@ -41,6 +41,7 @@ class RunRequest(BaseModel):
     repo_url: str = Field(..., description="GitHub repository URL to clone")
     team_name: str = Field(..., description="Hackathon team name")
     leader_name: str = Field(..., description="Team leader's name")
+    max_iterations: int = Field(default=5, ge=1, le=20, description="Max healing iterations (default: 5)")
 
 
 # ---------- Fix ----------

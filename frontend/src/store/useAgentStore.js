@@ -1,269 +1,495 @@
 import { create } from 'zustand';
 
-const STEPS = [
-    'Cloning repository',
-    'Discovering test files',
-    'Running tests',
-    'Generating fixes',
-    'Pushing to branch',
-    'Monitoring CI/CD',
+const BACKEND = 'http://localhost:8000';
+
+// Steps in the pipeline, updated in real-time from SSE
+const PIPELINE_STEPS = [
+  'Cloning repository',
+  'Discovering tests',
+  'Running tests',
+  'Generating fixes',
+  'Pushing to branch',
+  'Monitoring CI/CD',
 ];
 
-// Transform backend RunResult → frontend component format
-function transformBackendResult(data) {
-    const isError = data.status === 'ERROR';
-    const fixes = data.fixes || [];
-    const iterations = data.iterations || [];
+const useAgentStore = create((set, get) => ({
+  // ---- State ----
+  repoUrl: '',
+  teamName: '',
+  leaderName: '',
+  maxIterations: 5,
+  isRunning: false,
+  currentStep: -1,            // index into PIPELINE_STEPS
+  result: null,
+  liveLog: [],                // array of { message, type, agent?, timestamp }
+  error: null,
+  backendOnline: false,
+  fixFilterType: 'ALL',
 
-    // Determine the real status: if backend says ERROR, honor it.
-    // If pipeline didn't explicitly pass AND there are zero fixes with failures present, mark as ERROR.
-    let finalStatus = data.status;
-    if (!isError && fixes.length === 0 && iterations.length === 0 && data.status !== 'PASSED') {
-        finalStatus = 'ERROR';
+  // ---- Actions ----
+  setRepoUrl: (url) => set({ repoUrl: url }),
+  setTeamName: (name) => set({ teamName: name }),
+  setLeaderName: (name) => set({ leaderName: name }),
+  setMaxIterations: (n) => set({ maxIterations: n }),
+  setFixFilter: (type) => set({ fixFilterType: type }),
+
+  checkBackend: async () => {
+    try {
+      const res = await fetch(`${BACKEND}/api/health`);
+      set({ backendOnline: res.ok });
+    } catch {
+      set({ backendOnline: false });
+    }
+  },
+
+  // Start the pipeline with SSE streaming
+  startRun: async () => {
+    const { repoUrl, teamName, leaderName } = get();
+    if (!repoUrl) return;
+
+    set({
+      isRunning: true,
+      currentStep: 0,
+      result: null,
+      liveLog: [],
+      error: null,
+      fixFilterType: 'ALL',
+    });
+
+    const addLog = (message, type = 'info', agent = null) => {
+      set((state) => ({
+        liveLog: [
+          ...state.liveLog,
+          {
+            message,
+            type,
+            agent,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }));
+    };
+
+    addLog('Pipeline started — connecting to backend...', 'info', 'System');
+
+    try {
+      const response = await fetch(`${BACKEND}/api/run-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo_url: repoUrl,
+          team_name: teamName || 'RIFT_Team',
+          leader_name: leaderName || 'Agent',
+          max_iterations: get().maxIterations,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete line in buffer
+
+        let eventType = 'log';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim();
+            continue;
+          }
+          if (line.startsWith('data: ')) {
+            const rawData = line.slice(6);
+            try {
+              const data = JSON.parse(rawData);
+              handleSSEEvent(eventType, data, set, get, addLog);
+            } catch {
+              // Not JSON — plain text
+              if (rawData.trim()) {
+                addLog(rawData, 'info');
+              }
+            }
+            eventType = 'log'; // Reset after consuming
+            continue;
+          }
+        }
+      }
+
+    } catch (err) {
+      console.error('SSE stream error:', err);
+      set({ error: err.message });
+      addLog(`Connection error: ${err.message}`, 'error', 'System');
+
+      // Fallback: try blocking POST
+      try {
+        addLog('Falling back to blocking API call...', 'info', 'System');
+        const res = await fetch(`${BACKEND}/api/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            repo_url: get().repoUrl,
+            team_name: get().teamName || 'RIFT_Team',
+            leader_name: get().leaderName || 'Agent',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const transformed = transformBackendResult(data);
+          set({ result: transformed, error: null });
+          addLog('Pipeline complete (blocking fallback)', 'success', 'System');
+        }
+      } catch (fallbackErr) {
+        set({ error: fallbackErr.message });
+        addLog(`Fallback also failed: ${fallbackErr.message}`, 'error', 'System');
+      }
     }
 
-    const isErrorFinal = finalStatus === 'ERROR';
+    set({ isRunning: false, currentStep: -1 });
+  },
 
-    // Score: if ERROR, everything is 0. Otherwise derive dynamically.
-    const rawScore = isErrorFinal ? 0 : (data.score || 0);
-    const base = isErrorFinal ? 0 : 100;
-    const speedBonus = rawScore > 100 ? rawScore - 100 : 0;
-    const efficiencyPenalty = (!isErrorFinal && rawScore < 100) ? (100 - rawScore) : 0;
+  // Load demo data (no backend needed)
+  loadDemo: () => {
+    const demo = generateDemoData();
+    set({
+      result: demo,
+      isRunning: false,
+      currentStep: -1,
+      error: null,
+      liveLog: [
+        { message: 'Demo data loaded — this is simulated data', type: 'info', agent: 'System', timestamp: new Date().toISOString() },
+        { message: 'Clone Agent: Cloned demo repository', type: 'info', agent: 'Clone Agent', timestamp: new Date().toISOString() },
+        { message: 'Discover Agent: Found 8 tests (pytest)', type: 'info', agent: 'Discover Agent', timestamp: new Date().toISOString() },
+        { message: 'Analyze Agent: Found 3 errors (SYNTAX, IMPORT, INDENTATION)', type: 'info', agent: 'Analyze Agent', timestamp: new Date().toISOString() },
+        { message: 'Heal Agent: Applied 3 fixes, pushed to branch', type: 'success', agent: 'Heal Agent', timestamp: new Date().toISOString() },
+        { message: 'Verify Agent: All 8 tests passed!', type: 'success', agent: 'Verify Agent', timestamp: new Date().toISOString() },
+        { message: 'Pipeline complete: PASSED -- Score: 110/120', type: 'success', agent: 'System', timestamp: new Date().toISOString() },
+      ],
+    });
+  },
 
-    return {
-        repo_url: data.repo_url,
-        team_name: data.team_name,
-        leader_name: data.leader_name,
-        branch_name: data.branch_name,
-        total_failures: iterations[0]?.failed || 0,
-        total_fixes: fixes.length,
-        final_status: finalStatus,
-        error_message: data.error_message || null,
-        time_taken: data.started_at && data.finished_at
-            ? (new Date(data.finished_at) - new Date(data.started_at)) / 1000
-            : 0,
-        fixes: fixes.map(f => ({
-            file: f.file,
-            bug_type: f.bug_type,
-            line_number: f.line_number,
-            commit_message: f.commit_message,
-            status: f.status === 'VERIFIED' ? 'Fixed' : f.status === 'APPLIED' ? 'Applied' : 'Failed',
-            dashboard_output: `${f.bug_type} error in ${f.file} line ${f.line_number} → Fix: ${f.commit_message ? f.commit_message.replace('[AI-AGENT] ', '') : 'applied'}`,
-            original_code: f.original_code || '',
-            fixed_code: f.fixed_code || '',
-        })),
-        cicd_runs: iterations.map(iter => ({
-            iteration: iter.number,
-            status: iter.status,
-            timestamp: iter.timestamp ? new Date(iter.timestamp).getTime() / 1000 : Date.now() / 1000,
-            failures: iter.failed || 0,
-            passed: iter.passed || 0,
-            total: iter.total || 0,
-        })),
-        score: {
-            base,
-            speed_bonus: speedBonus,
-            efficiency_penalty: efficiencyPenalty,
-            total: rawScore,
-        },
-    };
+  // Reset
+  reset: () =>
+    set({
+      isRunning: false,
+      currentStep: -1,
+      result: null,
+      liveLog: [],
+      error: null,
+    }),
+}));
+
+
+// ---- SSE Event Handler ----
+
+function handleSSEEvent(type, data, set, get, addLog) {
+  switch (type) {
+    case 'step':
+      // { step, index, message }
+      set({ currentStep: data.index ?? get().currentStep });
+      addLog(data.message || `Step: ${data.step}`, 'info', null);
+      break;
+
+    case 'agent':
+      // { agent, message, type }
+      addLog(data.message, data.type || 'info', data.agent);
+      break;
+
+    case 'iteration':
+      // { number, passed, failed, total, status, fixes_applied, new_fixes }
+      addLog(
+        `Iteration ${data.number}: ${data.passed} passed, ${data.failed} failed (${data.status})`,
+        data.status === 'PASSED' ? 'success' : 'error',
+        'Verify Agent'
+      );
+
+      // Update result state incrementally so UI updates in real-time
+      const incomingFixes = (data.new_fixes || []).map(f => ({
+          file: f.file,
+          bug_type: f.bug_type,
+          line_number: f.line_number,
+          original_code: f.original_code || '',
+          fixed_code: f.fixed_code || '',
+          commit_message: f.commit_message || '',
+          status: f.status || 'PENDING'
+      }));
+
+      set((state) => {
+          // Initialize result if null (so UI shows up early)
+          const currentResult = state.result || {
+              repo_url: '...', // placeholder
+              iterations: [],
+              fixes: [],
+              final_status: 'RUNNING',
+              score: { overall: 0, breakdown: [] },
+              total_commits: 0
+          };
+
+          // Append iteration
+          const newIterations = [...(currentResult.iterations || []), {
+              number: data.number,
+              passed: data.passed,
+              failed: data.failed,
+              total: data.total,
+              status: data.status,
+              fixes_applied: data.fixes_applied || 0,
+              timestamp: new Date().toISOString()
+          }];
+
+          // Append fixes
+          const newFixesList = [...(currentResult.fixes || []), ...incomingFixes];
+          
+          // Compute derived fields for UI
+          const totalFixes = newFixesList.filter(f => f.status === 'APPLIED' || f.status === 'VERIFIED').length;
+          const startDate = currentResult.started_at ? new Date(currentResult.started_at) : new Date();
+          const timeTaken = (new Date() - startDate) / 1000;
+
+          return {
+              result: {
+                  ...currentResult,
+                  started_at: currentResult.started_at || startDate.toISOString(),
+                  iterations: newIterations,
+                  fixes: newFixesList,
+                  failed_tests: data.failed,
+                  passed_tests: data.passed,
+                  total_tests: data.total,
+                  final_status: data.status, // Update status too
+                  // Computed fields
+                  total_failures: data.failed, 
+                  total_fixes: totalFixes,
+                  time_taken: timeTaken,
+              }
+          };
+      });
+      break;
+
+    case 'log':
+      // { message, type }
+      addLog(data.message, data.type || 'info', null);
+      break;
+
+    case 'error':
+      // { message }
+      set({ error: data.message });
+      addLog(`Error: ${data.message}`, 'error', 'System');
+      break;
+
+    case 'result':
+      // Full RunResult JSON
+      const transformed = transformBackendResult(data);
+      set({ result: transformed, error: null });
+      break;
+
+    case 'done':
+      addLog('Stream ended — pipeline complete', 'info', 'System');
+      break;
+
+    default:
+      if (data.message) {
+        addLog(data.message, data.type || 'info', data.agent || null);
+      }
+  }
 }
 
-const useAgentStore = create((set, get) => ({
-    // Inputs
-    repoUrl: '',
-    teamName: '',
-    leaderName: '',
 
-    // Run state
-    isRunning: false,
-    currentStep: 0,
-    steps: STEPS,
+// ---- Transform Backend Result for Components ----
 
-    // Live log
-    liveLog: [],
+function transformBackendResult(data) {
+  if (!data) return null;
 
-    // Result
-    result: null,
-    error: null,
+  const iterations = (data.iterations || []).map((iter) => ({
+    number: iter.number,
+    passed: iter.passed || 0,
+    failed: iter.failed || 0,
+    total: iter.total || 0,
+    errors_found: iter.errors_found || 0,
+    fixes_applied: iter.fixes_applied || 0,
+    status: iter.status || 'FAILED',
+    timestamp: iter.timestamp,
+  }));
 
-    // UI state
-    fixFilterType: 'ALL',
-    isLogExpanded: true,
+  const fixes = (data.fixes || []).map((f) => ({
+    file: f.file,
+    bug_type: f.bug_type,
+    line_number: f.line_number,
+    original_code: f.original_code || '',
+    fixed_code: f.fixed_code || '',
+    commit_message: f.commit_message || '',
+    status: f.status || 'PENDING',
+  }));
 
-    // Actions
-    setField: (field, value) => set({ [field]: value }),
-    setFixFilter: (filterType) => set({ fixFilterType: filterType }),
-    toggleLog: () => set((s) => ({ isLogExpanded: !s.isLogExpanded })),
+  // Determine final status from the last iteration (most accurate)
+  let finalStatus = data.status || 'FAILED';
+  if (iterations.length > 0) {
+    const lastIter = iterations[iterations.length - 1];
+    if (lastIter.status === 'PASSED' || (lastIter.failed === 0 && lastIter.total > 0)) {
+      finalStatus = 'PASSED';
+    }
+  }
 
-    addLog: (message, type = 'info') =>
-        set((s) => ({
-            liveLog: [
-                ...s.liveLog,
-                { timestamp: new Date().toISOString(), message, type },
-            ],
-        })),
+  const totalTests = iterations.length > 0 ? iterations[iterations.length - 1].total : 0;
+  const passedTests = iterations.length > 0 ? iterations[iterations.length - 1].passed : 0;
+  const failedTests = iterations.length > 0 ? iterations[iterations.length - 1].failed : 0;
 
-    // Full reset — clears EVERYTHING including inputs for a clean new run
-    reset: () =>
-        set({
-            repoUrl: '',
-            teamName: '',
-            leaderName: '',
-            isRunning: false,
-            currentStep: 0,
-            liveLog: [],
-            result: null,
-            error: null,
-            fixFilterType: 'ALL',
-        }),
+  // Compute score breakdown from raw integer (backend returns 0-120)
+  const rawScore = data.score ?? 0;
+  const scoreObj = computeScoreBreakdown(rawScore, data.total_commits || 0, finalStatus);
 
-    // Dismiss error banner only — don't wipe result or inputs
-    dismissError: () => set({ error: null }),
+  // Compute time_taken from started_at / finished_at
+  let timeTaken = 0;
+  if (data.started_at && data.finished_at) {
+    timeTaken = (new Date(data.finished_at) - new Date(data.started_at)) / 1000;
+  }
 
-    startAgent: async () => {
-        const { repoUrl, teamName, leaderName, addLog } = get();
+  // Count total failures (initial) and fixes applied
+  const totalFixes = fixes.filter(f => f.status === 'APPLIED' || f.status === 'VERIFIED').length;
 
-        // Input validation
-        if (!repoUrl || !teamName || !leaderName) return;
-        if (!/^https?:\/\/.+/.test(repoUrl)) {
-            set({ error: 'Please enter a valid repository URL starting with https://' });
-            return;
-        }
+  return {
+    repo_url: data.repo_url || '',
+    branch_name: data.branch_name || '',
+    team_name: data.team_name || '',
+    leader_name: data.leader_name || '',
+    final_status: finalStatus,
+    score: scoreObj,
+    total_commits: data.total_commits || 0,
+    total_tests: totalTests,
+    passed_tests: passedTests,
+    failed_tests: failedTests,
+    total_failures: failedTests,
+    total_fixes: totalFixes,
+    time_taken: timeTaken,
+    iterations,
+    fixes,
+    cicd_runs: iterations,
+    started_at: data.started_at || '',
+    finished_at: data.finished_at || '',
+    error_message: data.error_message || null,
+  };
+}
 
-        set({ isRunning: true, currentStep: 0, liveLog: [], result: null, error: null, fixFilterType: 'ALL' });
 
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// ---- Score Breakdown Computation ----
 
-        addLog('🚀 Starting CI/CD Healing Agent...', 'info');
+function computeScoreBreakdown(rawScore, totalCommits, finalStatus) {
+  // Backend rules: base=100, speed_bonus=10 (if <5min), penalty=-2 per commit over 20
+  // If pipeline didn't pass, show the raw score directly
+  if (rawScore === 0) {
+    return { base: 0, speed_bonus: 0, efficiency_penalty: 0, total: 0 };
+  }
 
-        // Simulate step progress while waiting for backend
-        const stepInterval = setInterval(() => {
-            const current = get().currentStep;
-            if (current < STEPS.length - 1) {
-                set({ currentStep: current + 1 });
-                addLog(`⏳ ${STEPS[current + 1]}...`, 'progress');
-            }
-        }, 3000);
+  const base = Math.min(rawScore, 100);
+  const hasSpeedBonus = rawScore > 100;
+  const speed_bonus = hasSpeedBonus ? Math.min(rawScore - 100, 10) : 0;
+  const excessCommits = Math.max(0, totalCommits - 20);
+  const efficiency_penalty = excessCommits * 2;
+  const total = rawScore;
 
-        // Warn user if taking too long
-        const timeoutWarning = setTimeout(() => {
-            addLog('⏰ This is taking longer than expected. The AI agent is still working...', 'progress');
-        }, 180000); // 3 minutes
+  return { base, speed_bonus, efficiency_penalty, total };
+}
 
-        try {
-            const res = await fetch(`${apiUrl}/api/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    repo_url: repoUrl,
-                    team_name: teamName,
-                    leader_name: leaderName,
-                }),
-            });
+// ---- Demo Data ----
 
-            clearInterval(stepInterval);
-            clearTimeout(timeoutWarning);
+function generateDemoData() {
+  const now = new Date();
+  return {
+    repo_url: 'https://github.com/AshrafGalaxy/dummy-python-healing-repo',
+    branch_name: 'ASHRAFGALAXY_AGENT_AI_Fix',
+    team_name: 'AshrafGalaxy',
+    leader_name: 'Agent',
+    final_status: 'PASSED',
+    score: { base: 100, speed_bonus: 10, efficiency_penalty: 0, total: 110 },
+    total_commits: 3,
+    total_tests: 8,
+    passed_tests: 8,
+    failed_tests: 0,
+    total_failures: 3,
+    total_fixes: 3,
+    time_taken: 45,
+    iterations: [
+      {
+        number: 1,
+        passed: 5,
+        failed: 3,
+        total: 8,
+        errors_found: 3,
+        fixes_applied: 3,
+        status: 'FAILED',
+        timestamp: new Date(now - 60000).toISOString(),
+      },
+      {
+        number: 2,
+        passed: 8,
+        failed: 0,
+        total: 8,
+        errors_found: 0,
+        fixes_applied: 0,
+        status: 'PASSED',
+        timestamp: new Date(now - 30000).toISOString(),
+      },
+    ],
+    fixes: [
+      {
+        file: 'calculator.py',
+        bug_type: 'SYNTAX',
+        line_number: 15,
+        original_code: 'def add(a, b)',
+        fixed_code: 'def add(a, b):',
+        commit_message: '[AI-AGENT] Fix SYNTAX in calculator.py:15',
+        status: 'VERIFIED',
+      },
+      {
+        file: 'utils.py',
+        bug_type: 'IMPORT',
+        line_number: 3,
+        original_code: 'from colections import OrderedDict',
+        fixed_code: 'from collections import OrderedDict',
+        commit_message: '[AI-AGENT] Fix IMPORT in utils.py:3',
+        status: 'VERIFIED',
+      },
+      {
+        file: 'models.py',
+        bug_type: 'INDENTATION',
+        line_number: 22,
+        original_code: '      return self.value',
+        fixed_code: '        return self.value',
+        commit_message: '[AI-AGENT] Fix INDENTATION in models.py:22',
+        status: 'VERIFIED',
+      },
+    ],
+    cicd_runs: [
+      {
+        number: 1,
+        passed: 5,
+        failed: 3,
+        total: 8,
+        errors_found: 3,
+        fixes_applied: 3,
+        status: 'FAILED',
+        timestamp: new Date(now - 60000).toISOString(),
+      },
+      {
+        number: 2,
+        passed: 8,
+        failed: 0,
+        total: 8,
+        errors_found: 0,
+        fixes_applied: 0,
+        status: 'PASSED',
+        timestamp: new Date(now - 30000).toISOString(),
+      },
+    ],
+    started_at: new Date(now - 90000).toISOString(),
+    finished_at: now.toISOString(),
+    error_message: null,
+  };
+}
 
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-            const data = await res.json();
-
-            // Transform backend response to match our store format
-            const transformed = transformBackendResult(data);
-
-            set({ result: transformed, isRunning: false, currentStep: STEPS.length });
-
-            // Log correct status — don't say "success" if backend returned ERROR
-            if (transformed.final_status === 'ERROR') {
-                addLog(`⚠️ Agent completed with errors: ${transformed.error_message || 'Unknown error'}`, 'error');
-            } else if (transformed.final_status === 'PASSED') {
-                addLog('✅ Pipeline healed successfully!', 'success');
-            } else {
-                addLog(`⚠️ Agent finished — status: ${transformed.final_status}`, 'progress');
-            }
-        } catch (err) {
-            clearInterval(stepInterval);
-            clearTimeout(timeoutWarning);
-            set({ error: err.message, isRunning: false });
-            addLog(`❌ Error: ${err.message}`, 'error');
-        }
-    },
-
-    // Fetch latest results on page load
-    fetchLatestResult: async () => {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        try {
-            const res = await fetch(`${apiUrl}/api/results`);
-            if (!res.ok) return; // 404 means no previous run
-            const data = await res.json();
-            const transformed = transformBackendResult(data);
-            set({
-                result: transformed,
-                // Pre-fill inputs from last result so user sees context
-                repoUrl: data.repo_url || '',
-                teamName: data.team_name || '',
-                leaderName: data.leader_name || '',
-            });
-        } catch {
-            // Silently ignore — page just shows empty state
-        }
-    },
-
-    // Demo mode — load sample data without API
-    loadDemo: () => {
-        const demoResult = {
-            repo_url: 'https://github.com/user/repo',
-            team_name: 'RIFT ORGANISERS',
-            leader_name: 'Saiyam Kumar',
-            branch_name: 'RIFT_ORGANISERS_SAIYAM_KUMAR_AI_Fix',
-            total_failures: 5,
-            total_fixes: 5,
-            final_status: 'PASSED',
-            time_taken: 187.3,
-            fixes: [
-                { file: 'src/utils.py', bug_type: 'LINTING', line_number: 15, commit_message: '[AI-AGENT] Fix: remove unused import in src/utils.py', status: 'Fixed', dashboard_output: 'LINTING error in src/utils.py line 15 → Fix: remove the import statement' },
-                { file: 'src/main.py', bug_type: 'SYNTAX', line_number: 42, commit_message: '[AI-AGENT] Fix: missing colon in if statement src/main.py', status: 'Fixed', dashboard_output: 'SYNTAX error in src/main.py line 42 → Fix: add missing colon' },
-                { file: 'tests/test_api.py', bug_type: 'IMPORT', line_number: 3, commit_message: '[AI-AGENT] Fix: update import path in tests/test_api.py', status: 'Fixed', dashboard_output: 'IMPORT error in tests/test_api.py line 3 → Fix: correct import path' },
-                { file: 'src/handler.py', bug_type: 'TYPE_ERROR', line_number: 87, commit_message: '[AI-AGENT] Fix: cast string to int in src/handler.py', status: 'Fixed', dashboard_output: 'TYPE_ERROR in src/handler.py line 87 → Fix: add int() cast' },
-                { file: 'src/config.py', bug_type: 'LOGIC', line_number: 22, commit_message: '[AI-AGENT] Fix: correct comparison operator in src/config.py', status: 'Fixed', dashboard_output: 'LOGIC error in src/config.py line 22 → Fix: use == instead of =' },
-            ],
-            cicd_runs: [
-                { iteration: 1, status: 'FAILED', timestamp: 1708300000, failures: 5 },
-                { iteration: 2, status: 'FAILED', timestamp: 1708300060, failures: 3 },
-                { iteration: 3, status: 'FAILED', timestamp: 1708300120, failures: 1 },
-                { iteration: 4, status: 'PASSED', timestamp: 1708300180, failures: 0 },
-            ],
-            score: { base: 100, speed_bonus: 10, efficiency_penalty: 0, total: 110 },
-        };
-
-        set({
-            repoUrl: 'https://github.com/user/repo',
-            teamName: 'RIFT ORGANISERS',
-            leaderName: 'Saiyam Kumar',
-            result: demoResult,
-            isRunning: false,
-            currentStep: 6,
-            liveLog: [
-                { timestamp: '2026-02-19T12:00:00Z', message: '🚀 Starting CI/CD Healing Agent...', type: 'info' },
-                { timestamp: '2026-02-19T12:00:01Z', message: '📂 Cloning repository...', type: 'progress' },
-                { timestamp: '2026-02-19T12:00:05Z', message: '🔍 Discovered 12 test files', type: 'success' },
-                { timestamp: '2026-02-19T12:00:10Z', message: '🧪 Running pytest suite...', type: 'progress' },
-                { timestamp: '2026-02-19T12:00:15Z', message: '❌ 5 failures detected', type: 'error' },
-                { timestamp: '2026-02-19T12:00:20Z', message: '🤖 Generating AI-powered fixes...', type: 'progress' },
-                { timestamp: '2026-02-19T12:00:30Z', message: '✅ Fix applied: remove unused import in src/utils.py', type: 'success' },
-                { timestamp: '2026-02-19T12:00:35Z', message: '✅ Fix applied: missing colon in src/main.py', type: 'success' },
-                { timestamp: '2026-02-19T12:00:40Z', message: '✅ Fix applied: update import path in tests/test_api.py', type: 'success' },
-                { timestamp: '2026-02-19T12:00:45Z', message: '✅ Fix applied: cast string to int in src/handler.py', type: 'success' },
-                { timestamp: '2026-02-19T12:00:50Z', message: '✅ Fix applied: correct comparison in src/config.py', type: 'success' },
-                { timestamp: '2026-02-19T12:00:55Z', message: '📤 Pushing fixes to branch...', type: 'progress' },
-                { timestamp: '2026-02-19T12:01:00Z', message: '🔄 CI/CD Iteration 1/5 — FAILED (5 failures)', type: 'error' },
-                { timestamp: '2026-02-19T12:02:00Z', message: '🔄 CI/CD Iteration 2/5 — FAILED (3 failures)', type: 'error' },
-                { timestamp: '2026-02-19T12:03:00Z', message: '🔄 CI/CD Iteration 3/5 — FAILED (1 failure)', type: 'error' },
-                { timestamp: '2026-02-19T12:03:07Z', message: '🔄 CI/CD Iteration 4/5 — PASSED ✅', type: 'success' },
-                { timestamp: '2026-02-19T12:03:10Z', message: '🎉 All tests passing! Pipeline healed.', type: 'success' },
-            ],
-        });
-    },
-}));
 
 export default useAgentStore;

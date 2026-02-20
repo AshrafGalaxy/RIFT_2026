@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { FiSun, FiMoon } from 'react-icons/fi';
+import { Bot } from 'lucide-react';
 
 function getInitialTheme() {
     if (typeof window !== 'undefined') {
@@ -57,7 +58,7 @@ export default function Navbar() {
         >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl sm:text-3xl">🤖</span>
+                    <Bot className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
                     <div>
                         <h1 className="text-lg sm:text-xl font-bold gradient-text leading-tight">
                             CI/CD Healing Agent

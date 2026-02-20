@@ -19,9 +19,18 @@ class GitService:
     """Git operations with hackathon guardrails enforced."""
 
     def clone_repo(self, repo_url: str, dest_path: str) -> Repo:
-        """Clone a repository to dest_path."""
-        logger.info(f"Cloning {repo_url} → {dest_path}")
-        repo = Repo.clone_from(repo_url, dest_path)
+        """Clone a repository to dest_path (shallow, single-branch for speed)."""
+        logger.info(f"Cloning {repo_url} → {dest_path} (shallow)")
+        repo = Repo.clone_from(
+            repo_url, dest_path,
+            depth=1,
+            single_branch=True,
+        )
+        # Unshallow so we can create branches and push
+        try:
+            repo.git.fetch('--unshallow')
+        except GitCommandError:
+            pass  # Already unshallowed or not needed
         return repo
 
     def create_branch(

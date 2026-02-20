@@ -64,8 +64,7 @@ class CloneAgent:
         except Exception as e:
             logger.warning(f"rmtree attempt 1 failed: {e}")
 
-        # Attempt 2: wait for file locks to release, then retry
-        time.sleep(1)
+        # Attempt 2: retry immediately\n
         try:
             shutil.rmtree(path, onerror=_on_rm_error)
             return
