@@ -22,28 +22,33 @@ graph TD
     classDef ext fill:#FFF3E0,stroke:#FB8C00,stroke-width:2px,color:black
     classDef db fill:#ECEFF1,stroke:#546E7A,stroke-width:2px,color:black
 
-    %% External Actors
-    User([👤 Developer]):::user
-    GitHub[🐱 GitHub Repository]:::ext
-    Gemini[🧠 Google Gemini AI]:::ai
-
-    %% System Boundary
-    subgraph System [Autonomous CI/CD Platform]
+    subgraph Global_Canvas [Autonomous CI/CD Ecosystem]
         direction TB
-        style System fill:#FAFAFA,stroke:#9E9E9E,stroke-width:1px,color:black
+        style Global_Canvas fill:#f9f9f9,stroke:#333,stroke-width:1px,color:black
 
-        Frontend[🖥️ React Dashboard]:::frontend
-        Backend[⚙️ FastAPI Backend]:::backend
-        
-        subgraph Engine [Execution Engine]
+        %% External Actors
+        User([👤 Developer]):::user
+        GitHub[🐱 GitHub Repository]:::ext
+        Gemini[🧠 Google Gemini AI]:::ai
+
+        %% System Boundary
+        subgraph System [Platform Internal]
             direction TB
-            style Engine fill:#FFFFFF,stroke:#333,stroke-width:1px
+            style System fill:#FFFFFF,stroke:#9E9E9E,stroke-width:1px,color:black
+
+            Frontend[🖥️ React Dashboard]:::frontend
+            Backend[⚙️ FastAPI Backend]:::backend
             
-            Orchestrator[🎼 CrewAI Agents]:::backend
-            Sandbox[📦 Docker Sandbox]:::ext
+            subgraph Engine [Execution Engine]
+                direction TB
+                style Engine fill:#F5F5F5,stroke:#333,stroke-width:1px
+                
+                Orchestrator[🎼 CrewAI Agents]:::backend
+                Sandbox[📦 Docker Sandbox]:::ext
+            end
+            
+            Results[(📊 Results JSON)]:::db
         end
-        
-        Results[(📊 Results JSON)]:::db
     end
 
     %% Data Flow
