@@ -14,22 +14,41 @@
 
 ```mermaid
 graph TD
-    User[User] -->|Repo URL + Team Info| Frontend[React Frontend]
-    Frontend -->|POST /api/run| Backend[FastAPI Backend]
-    subgraph "Backend Core"
-        Backend --> Orchestrator[CrewAI Orchestrator]
-        Orchestrator --> Agent1[Clone Agent]
-        Orchestrator --> Agent2[Discover Agent]
-        Orchestrator --> Loop{Healing Loop}
-        Loop --> Agent3[Analyze Agent]
-        Loop --> Agent4[Heal Agent]
-        Loop --> Agent5[Verify Agent]
-        Agent3 -->|Detects Errors| Loop
-        Agent4 -->|Generates Fixes| Loop
-        Agent5 -->|Verifies Fixes| Loop
+    %% Styles
+    classDef user fill:#f9f,stroke:#333,stroke-width:2px,color:black,font-weight:bold
+    classDef frontend fill:#d4f1f9,stroke:#00bfff,stroke-width:2px,color:black,font-weight:bold
+    classDef backend fill:#e6fffa,stroke:#00fa9a,stroke-width:2px,color:black,font-weight:bold
+    classDef agent fill:#fff3e0,stroke:#ff8c00,stroke-width:2px,color:black
+    classDef loop fill:#fff0f5,stroke:#ff69b4,stroke-width:2px,color:black,stroke-dasharray: 5 5
+    classDef storage fill:#f3e5f5,stroke:#9370db,stroke-width:2px,color:black
+
+    User([👤 User]):::user -->|1. Submit Repo URL| Frontend[🖥️ React Frontend]:::frontend
+    Frontend -->|2. POST /api/run| Backend[⚙️ FastAPI Backend]:::backend
+
+    subgraph Core_Logic [Backend Execution Environment]
+        direction TB
+        style Core_Logic fill:#f9f9f9,stroke:#666,stroke-width:1px,color:black
+        
+        Backend --> Orchestrator[🎼 CrewAI Orchestrator]:::backend
+        
+        subgraph Agents [🤖 Autonomous Agents]
+            direction TB
+            style Agents fill:#fff,stroke:#333,stroke-width:1px,color:black
+            
+            Orchestrator --> Clone[⬇️ Clone Agent]:::agent
+            Clone --> Discover[🔍 Discover Agent]:::agent
+            Discover --> HealLoop{🔄 Healing Loop}:::loop
+            
+            HealLoop -->|Analyze| Analyze[🧠 Analyze Agent]:::agent
+            Analyze -->|Fix| Heal[❤️‍🩹 Heal Agent]:::agent
+            Heal -->|Verify| Verify[✅ Verify Agent]:::agent
+            Verify -->|Test Fail| HealLoop
+        end
+        
+        Verify -->|Test Pass| Results[(💾 Results JSON)]:::storage
     end
-    Loop -->|Success/Fail| Results[Results JSON]
-    Results -->|GET /api/results| Frontend
+
+    Results -->|3. GET /api/results| Frontend
 ```
 
 ## 🛠️ Tech Stack
