@@ -40,7 +40,7 @@ _executor = ThreadPoolExecutor(max_workers=2)
 # ---------- FastAPI App ----------
 
 app = FastAPI(
-    title="RIFT 2026 — Self-Healing CI/CD",
+    title="Autonomous Self-Healing CI/CD Pipeline",
     description="Autonomous self-healing CI/CD agent backend",
     version="1.0.0",
 )

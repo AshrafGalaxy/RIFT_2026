@@ -1,4 +1,4 @@
-# RIFT 2026
+# Autonomous Self-Healing CI CD Pipeline
 
 **Autonomous Self-Healing CI/CD Pipeline**
 
