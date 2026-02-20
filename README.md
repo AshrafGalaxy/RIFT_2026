@@ -13,8 +13,8 @@
 ## 🏗️ Architecture Diagram
 
 ```mermaid
-graph TD
-    %% Global Styles
+graph LR
+    %% Styles
     classDef user fill:#FFB6C1,stroke:#333,stroke-width:2px,color:black,font-weight:bold
     classDef frontend fill:#E0F7FA,stroke:#00ACC1,stroke-width:2px,color:black,font-weight:bold
     classDef backend fill:#E8F5E9,stroke:#43A047,stroke-width:2px,color:black,font-weight:bold
@@ -22,46 +22,37 @@ graph TD
     classDef ext fill:#FFF3E0,stroke:#FB8C00,stroke-width:2px,color:black
     classDef db fill:#ECEFF1,stroke:#546E7A,stroke-width:2px,color:black
 
-    subgraph Global_Canvas [Autonomous CI/CD Ecosystem]
+    %% Nodes
+    User([👤 User]):::user
+    GitHub[🐱 GitHub Repo]:::ext
+    Gemini[🧠 Gemini AI]:::ai
+
+    subgraph Platform [Autonomous CI/CD Platform]
         direction TB
-        style Global_Canvas fill:#f9f9f9,stroke:#333,stroke-width:1px,color:black
-
-        %% External Actors
-        User([👤 Developer]):::user
-        GitHub[🐱 GitHub Repository]:::ext
-        Gemini[🧠 Google Gemini AI]:::ai
-
-        %% System Boundary
-        subgraph System [Platform Internal]
-            direction TB
-            style System fill:#FFFFFF,stroke:#9E9E9E,stroke-width:1px,color:black
-
-            Frontend[🖥️ React Dashboard]:::frontend
-            Backend[⚙️ FastAPI Backend]:::backend
-            
-            subgraph Engine [Execution Engine]
-                direction TB
-                style Engine fill:#F5F5F5,stroke:#333,stroke-width:1px
-                
-                Orchestrator[🎼 CrewAI Agents]:::backend
-                Sandbox[📦 Docker Sandbox]:::ext
-            end
-            
-            Results[(📊 Results JSON)]:::db
+        style Platform fill:#f9f9f9,stroke:#333,stroke-width:1px
+        
+        Frontend[🖥️ Dashboard]:::frontend
+        Backend[⚙️ Backend API]:::backend
+        Results[(📊 Results)]:::db
+        
+        subgraph Engine [Execution Engine]
+            style Engine fill:#fff,stroke:#999,stroke-width:1px
+            Orchestrator[🎼 Agents]:::backend
+            Sandbox[📦 Sandbox]:::ext
         end
     end
 
-    %% Data Flow
-    User -->|1. Submit Repo URL| Frontend
-    Frontend -->|2. Trigger Run| Backend
-    Backend -->|3. Initialize| Orchestrator
+    %% Flow
+    User -->|1. URL| Frontend
+    Frontend -->|2. Start| Backend
+    Backend -->|3. Init| Orchestrator
     
-    Orchestrator <-->|4. Clone & Push| GitHub
-    Orchestrator <-->|5. Analyze & Fix| Gemini
-    Orchestrator <-->|6. Run Tests| Sandbox
+    Orchestrator <-->|4. Code| GitHub
+    Orchestrator <-->|5. Fix| Gemini
+    Orchestrator <-->|6. Test| Sandbox
     
-    Orchestrator -->|7. Save Data| Results
-    Results -->|8. Live Updates| Frontend
+    Orchestrator -->|7. Data| Results
+    Results -->|8. View| Frontend
 ```
 
 ## 🛠️ Tech Stack
