@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-const BACKEND = 'http://localhost:8000';
+const BACKEND = import.meta.env.VITE_API_URL || '';
 
 // Steps in the pipeline, updated in real-time from SSE
 const PIPELINE_STEPS = [

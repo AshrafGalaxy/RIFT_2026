@@ -3,12 +3,22 @@ RIFT 2026 — Configuration & Constants
 """
 import os
 from pathlib import Path
+import tempfile
 
 # --- Paths ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent
-CLONE_DIR = BACKEND_DIR / "cloned_repos"
-RESULTS_PATH = PROJECT_ROOT / "results.json"
+
+# Check if running on Vercel (or other read-only env)
+if os.environ.get("VERCEL"):
+    # Use /tmp for writable storage in serverless environments
+    TEMP_DIR = Path(tempfile.gettempdir())
+    CLONE_DIR = TEMP_DIR / "cloned_repos"
+    RESULTS_PATH = TEMP_DIR / "results.json"
+else:
+    # Local development default
+    CLONE_DIR = BACKEND_DIR / "cloned_repos"
+    RESULTS_PATH = PROJECT_ROOT / "results.json"
 
 # --- Healing Pipeline ---
 MAX_ITERATIONS = 5          # default: 5 as per hackathon spec

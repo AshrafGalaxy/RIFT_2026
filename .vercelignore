@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+.git
+.DS_Store
+node_modules
+dist
+backend/cloned_repos
+backend/results.json
