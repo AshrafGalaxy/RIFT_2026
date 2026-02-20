@@ -22,37 +22,42 @@ graph LR
     classDef ext fill:#FFF3E0,stroke:#FB8C00,stroke-width:2px,color:black
     classDef db fill:#ECEFF1,stroke:#546E7A,stroke-width:2px,color:black
 
-    %% Nodes
-    User([👤 User]):::user
-    GitHub[🐱 GitHub Repo]:::ext
-    Gemini[🧠 Gemini AI]:::ai
+    subgraph Canvas [Autonomous CI/CD Ecosystem]
+        direction LR
+        style Canvas fill:#f9f9f9,stroke:#333,stroke-width:1px,color:black
 
-    subgraph Platform [Autonomous CI/CD Platform]
-        direction TB
-        style Platform fill:#f9f9f9,stroke:#333,stroke-width:1px
-        
-        Frontend[🖥️ Dashboard]:::frontend
-        Backend[⚙️ Backend API]:::backend
-        Results[(📊 Results)]:::db
-        
-        subgraph Engine [Execution Engine]
-            style Engine fill:#fff,stroke:#999,stroke-width:1px
-            Orchestrator[🎼 Agents]:::backend
-            Sandbox[📦 Sandbox]:::ext
+        %% Nodes
+        User([👤 User]):::user
+        GitHub[🐱 GitHub Repo]:::ext
+        Gemini[🧠 Gemini AI]:::ai
+
+        subgraph Platform [Platform Internal]
+            direction TB
+            style Platform fill:#fff,stroke:#999,stroke-width:1px
+            
+            Frontend[🖥️ Dashboard]:::frontend
+            Backend[⚙️ Backend API]:::backend
+            Results[(📊 Results)]:::db
+            
+            subgraph Engine [Execution Engine]
+                style Engine fill:#F5F5F5,stroke:#ccc,stroke-width:1px
+                Orchestrator[🎼 Agents]:::backend
+                Sandbox[📦 Sandbox]:::ext
+            end
         end
-    end
 
-    %% Flow
-    User -->|1. URL| Frontend
-    Frontend -->|2. Start| Backend
-    Backend -->|3. Init| Orchestrator
-    
-    Orchestrator <-->|4. Code| GitHub
-    Orchestrator <-->|5. Fix| Gemini
-    Orchestrator <-->|6. Test| Sandbox
-    
-    Orchestrator -->|7. Data| Results
-    Results -->|8. View| Frontend
+        %% Connections within Canvas
+        User -->|1. URL| Frontend
+        Frontend -->|2. Start| Backend
+        Backend -->|3. Init| Orchestrator
+        
+        Orchestrator <-->|4. Code| GitHub
+        Orchestrator <-->|5. Fix| Gemini
+        Orchestrator <-->|6. Test| Sandbox
+        
+        Orchestrator -->|7. Data| Results
+        Results -->|8. View| Frontend
+    end
 ```
 
 ## 🛠️ Tech Stack
